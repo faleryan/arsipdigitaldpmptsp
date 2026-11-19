@@ -1,10 +1,19 @@
-# Arsip Digital OSS
+# Arsip Digital OSS & SiCantik
 
-Aplikasi web untuk mengarsipkan data proyek **OSS RBA** sesuai *Format Arsip OSS* (33 kolom), lengkap dengan dashboard laporan dan penyimpanan dokumen PDF.
+Aplikasi web arsip digital perizinan dengan dua sumber data:
+
+- **OSS RBA**: data proyek sesuai *Format Arsip OSS* (33 kolom).
+- **SiCantik**: data permohonan izin sesuai *Rekap SiCantik* (13 kolom), misalnya izin praktik tenaga kesehatan, KKPR/PKKPR, PAUD, dan IPKD.
+
+Keduanya dilengkapi dashboard laporan, input manual, import Excel, dan penyimpanan dokumen PDF.
 
 **Teknologi:** React 18 + TypeScript + Vite (frontend, di-hosting di **Vercel**) · **Supabase** (database PostgreSQL, login, penyimpanan file).
 
 ## Fitur
+
+**Beranda** menampilkan ringkasan kedua sumber data, tren per bulan, dan daftar data yang terakhir diperbarui.
+
+### Menu OSS RBA (`/oss`)
 
 | Halaman | Isi |
 |---|---|
@@ -13,6 +22,20 @@ Aplikasi web untuk mengarsipkan data proyek **OSS RBA** sesuai *Format Arsip OSS
 | **Data Arsip** | Tabel dengan pencarian, filter, dan pengurutan. Klik baris untuk detail lengkap, edit, hapus, serta **unggah/lihat dokumen PDF**. Export ke Excel dengan format 33 kolom asli. |
 | **Input Data** | Formulir manual. NIB yang sudah ada mengisi otomatis data pelaku usaha; KBLI yang pernah dipakai mengisi otomatis judul & sektor. |
 | **Import Excel** | Seret file .xlsx/.xls/.csv dari OSS. Kolom dicocokkan otomatis, ada pratinjau (data baru / sudah ada / bermasalah), pilihan *perbarui* atau *lewati* data yang sudah ada. |
+
+### Menu SiCantik (`/sicantik`)
+
+| Halaman | Isi |
+|---|---|
+| **Dashboard** | Total permohonan, jumlah yang sudah dan belum ditetapkan, rata-rata lama proses (tanggal permohonan sampai penetapan), dan pemohon unik. Grafik tren bulanan, kategori izin, jenis permohonan (Baru/Perpanjangan/Perubahan/Pencabutan), status penetapan, jenis izin terbanyak, lama proses per jenis izin, lokasi/fasilitas teratas, daftar permohonan yang paling lama belum ditetapkan, dan rekap per jenis izin. Ada **laporan Excel** (7 sheet). |
+| **Data Arsip** | Pencarian (pemohon, nomor izin, no. permohonan, KTP, lokasi), filter kategori, jenis izin, permohonan, status, tahun, dan arsip. Klik baris untuk detail, edit, hapus, dan unggah dokumen. |
+| **Input Data** | Formulir manual. Bila No. KTP sudah pernah tercatat, data pemohon terisi otomatis. ID dibuat otomatis bila dikosongkan. |
+| **Import Excel** | Kolom **ID** menjadi kunci. Nilai "-" pada nomor izin/tanggal penetapan dibaca sebagai *belum ditetapkan*. Import ulang rekap terbaru akan memperbarui status izin yang sudah ditetapkan. |
+
+### Pengaturan
+
+| Halaman | Isi |
+|---|---|
 | **Pengguna** | (Admin) mengatur peran tiap pengguna. |
 
 **Peran pengguna**
@@ -30,7 +53,7 @@ Keamanan diterapkan di database (Row Level Security), jadi aturan peran tetap be
 
 1. Buka <https://supabase.com>, lalu **New project**. Catat kata sandi database.
 2. Buka **SQL Editor → New query**, salin **seluruh** isi file `supabase/schema.sql`, lalu klik **Run**.
-   Skrip ini membuat tabel, aturan keamanan, bucket penyimpanan `arsip-dokumen` (privat, maks. 20 MB per file), dan realtime.
+   Skrip ini membuat tabel OSS & SiCantik, aturan keamanan, bucket penyimpanan `arsip-dokumen` (privat, maks. 20 MB per file), dan realtime.
 3. Matikan pendaftaran publik: **Authentication → Sign In / Providers → Email**, lalu nonaktifkan **Allow new users to sign up**.
    (Pengaturan ini disarankan. Kalau tetap terbuka, akun yang mendaftar sendiri pun hanya berstatus *Nonaktif* dan tidak bisa melihat data.)
 4. Buat akun admin pertama: **Authentication → Users → Add user → Create new user**. Isi email & kata sandi, centang **Auto Confirm User**.
@@ -92,12 +115,14 @@ npx vercel --prod
 
 ## Cara pakai singkat
 
-1. Masuk sebagai admin, lalu buka **Import Excel** dan seret file unduhan OSS.
+1. Masuk sebagai admin, buka **OSS RBA → Import Excel** dan seret file unduhan OSS. Lakukan hal yang sama di **SiCantik → Import Excel** untuk file rekap SiCantik.
 2. Periksa pratinjau, lalu klik **Simpan**.
 3. Tambah staf: buat akun di Supabase (Langkah 1 nomor 4), lalu di menu **Pengguna** ubah perannya menjadi *Operator* atau *Pembaca*.
-4. Lampirkan dokumen: buka **Data Arsip**, klik baris proyek, lalu **Unggah dokumen** (PDF/JPG/PNG/WEBP).
+4. Lampirkan dokumen: buka **Data Arsip** (OSS atau SiCantik), klik barisnya, lalu **Unggah dokumen** (PDF/JPG/PNG/WEBP).
 
 ## Catatan pengolahan data
+
+**OSS**
 
 - **Id Proyek** menjadi kunci unik. Import ulang file yang sama tidak membuat data ganda.
 - **Tanggal** dikenali dari format `01/07/2020`, `24 April 2026`, maupun tanggal Excel. Tanggal yang tidak terbaca disimpan kosong dan diberi tanda di pratinjau.
@@ -106,22 +131,35 @@ npx vercel --prod
 - Penulisan kecamatan yang berbeda (mis. `TasifetoTimur`) dikelompokkan sebagai `Tasifeto Timur` di dashboard. Data aslinya tidak diubah.
 - Saat import memperbarui data lama, dokumen yang sudah dilampirkan **tidak** terhapus.
 
+**SiCantik**
+- **ID** SiCantik menjadi kunci unik. Rekap bisa diimport berulang kali (mis. tiap bulan) tanpa data ganda.
+- Tanda kutip di depan No. KTP (`'5304…`) otomatis dibuang.
+- Status *Sudah ditetapkan* = ada nomor izin atau tanggal penetapan.
+- Lama proses = selisih hari antara **Tanggal** permohonan dan **Tanggal Penetapan**.
+- Kategori izin (Tenaga Kesehatan, Tata Ruang, PAUD, dll.) dikenali otomatis dari nama izin.
+
+## Memperbarui database yang sudah ada
+
+Jika sebelumnya Anda sudah menjalankan `schema.sql` versi OSS saja, cukup **jalankan ulang seluruh isi `supabase/schema.sql`** di SQL Editor. Skrip ini aman dijalankan berulang: tabel SiCantik ditambahkan dan data OSS yang ada tidak berubah.
+
 ## Struktur folder
 
 ```
-supabase/schema.sql      skema database + keamanan + storage (jalankan sekali)
+supabase/schema.sql      skema database + keamanan + storage (jalankan sekali / ulang saat update)
 src/lib/api.ts           semua komunikasi dengan Supabase
 src/lib/columns.ts       definisi 33 kolom Format Arsip OSS
+src/lib/sicantik.ts      definisi 13 kolom Rekap SiCantik, status, kategori, lama proses
 src/lib/format.ts        pembacaan tanggal/angka & format rupiah
 src/lib/excel.ts         import & export Excel
-src/pages/               Login, Dashboard, DataArsip, InputData, ImportExcel, Pengguna
+src/pages/               Login, Beranda, halaman OSS (Dashboard, DataArsip, InputData, ImportExcel), Pengguna
+src/pages/sicantik/      halaman SiCantik (Dashboard, Data, Input, Import)
 src/components/          Layout, grafik, modal detail
 vercel.json              agar alamat halaman (mis. /data) tidak 404 saat di-refresh
 ```
 
 ## Kapasitas paket gratis Supabase
 
-Database 500 MB cukup untuk ratusan ribu baris proyek. Storage 1 GB setara kira-kira 2.000–5.000 file PDF (tergantung ukuran). Bila dokumen bertambah banyak, naikkan paket Supabase.
+Database 500 MB cukup untuk ratusan ribu baris data OSS dan SiCantik. Storage 1 GB setara kira-kira 2.000–5.000 file PDF (tergantung ukuran). Bila dokumen bertambah banyak, naikkan paket Supabase.
 
 ## Mengatasi masalah
 

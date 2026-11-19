@@ -72,7 +72,7 @@ export default function ImportExcel() {
     <>
       <StatusBanner />
       <div className="head">
-        <div><h1>Import data dari Excel</h1><p>Unggah file Excel/CSV hasil unduhan OSS dengan susunan kolom Format Arsip OSS.</p></div>
+        <div><h1>Import data OSS dari Excel</h1><p>Unggah file Excel/CSV hasil unduhan OSS dengan susunan kolom Format Arsip OSS.</p></div>
         <div className="head-actions"><button className="btn" onClick={template}><FileSpreadsheet size={16} />Unduh template</button></div>
       </div>
       <div className="steps">
@@ -162,8 +162,8 @@ export default function ImportExcel() {
           <h3>Import selesai</h3>
           <p className="muted">{fmtInt(stage.nNew)} data baru ditambahkan, {fmtInt(stage.nUpd)} data diperbarui.</p>
           <div className="row-gap center">
-            <Link className="btn primary" to="/">Lihat dashboard</Link>
-            <Link className="btn" to="/data">Lihat data</Link>
+            <Link className="btn primary" to="/oss">Lihat dashboard</Link>
+            <Link className="btn" to="/oss/data">Lihat data</Link>
             <button id="impAgain" className="btn" onClick={() => { setStage({ kind: "pick" }); setBuilt(null); setP(null); }}>Import file lain</button>
           </div>
         </div></div>

@@ -148,11 +148,11 @@ function Form({ editing, rows, byId, refresh, toast, nav }: {
       else await api.insertProyek(rec);
       if (pending.length) {
         setBusy("Mengunggah dokumen…");
-        for (const p of pending) await api.uploadDokumen(rec.id_proyek, p.file, p.label);
+        for (const p of pending) await api.uploadDokumen("oss", rec.id_proyek, p.file, p.label);
       }
       await refresh();
       toast(editing ? "Perubahan disimpan" : "Data tersimpan ke arsip");
-      if (editing) nav(`/data?id=${encodeURIComponent(rec.id_proyek)}`);
+      if (editing) nav(`/oss/data?id=${encodeURIComponent(rec.id_proyek)}`);
       else { setV(toForm(undefined)); setPending([]); setErrs({}); window.scrollTo(0, 0); }
     } catch (x) {
       toast(api.errMsg(x), 6000);

@@ -19,12 +19,12 @@ export default function Login() {
       <div className="login-art" aria-hidden="true">
         <div className="login-art-in">
           <span className="brand-mark lg"><Archive size={30} /></span>
-          <h1>Arsip Digital<br />Perizinan OSS</h1>
-          <p>Simpan, telusuri, dan laporkan data proyek OSS RBA dalam satu tempat — lengkap dengan dokumen arsipnya.</p>
+          <h1>Arsip Digital<br />OSS &amp; SiCantik</h1>
+          <p>Simpan, telusuri, dan laporkan data perizinan dari OSS RBA dan SiCantik dalam satu tempat — lengkap dengan dokumen arsipnya.</p>
           <ul>
-            <li>Import langsung dari file Excel unduhan OSS</li>
-            <li>Dashboard laporan per kecamatan, sektor & risiko</li>
-            <li>Dokumen PDF tersimpan aman per proyek</li>
+            <li>Import langsung dari file Excel OSS & rekap SiCantik</li>
+            <li>Dashboard laporan & lama proses penetapan izin</li>
+            <li>Dokumen PDF tersimpan aman per proyek & permohonan</li>
           </ul>
         </div>
       </div>

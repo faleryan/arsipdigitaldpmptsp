@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
-import { COLS, HEADER_MAP, LABEL, norm, PLACEHOLDERS, RISIKO, SKALA, type FieldKey, type Proyek } from "./columns";
+import { COLS, HEADER_MAP, LABEL, norm, PLACEHOLDERS, RISIKO, SKALA, type Proyek } from "./columns";
+import { SIC_COLS, SIC_HEADER_MAP, normalizeIzin, izinShort, kategoriIzin, groupIzin, avgLama, statusOf, lokasiKey, type Izin } from "./sicantik";
 import { fmtDateLong, fmtDateSlash, fmtNum, hasArsip, isISO, kecLabel, normalizeRecord, pad2 } from "./format";
 import { groupBy } from "./stats";
 
@@ -8,15 +9,25 @@ export interface ParsedSheet {
   sheet: string;
   headerRow: number;
   aoa: unknown[][];
-  map: (FieldKey | "no" | undefined)[];
+  map: (string | undefined)[];
   matched: string[];
   missing: string[];
   unknown: string[];
 }
 export interface ImportRow { line: number; rec: Proyek; problem: string; dateWarn: boolean }
 
+export interface SheetSpec { headerMap: Record<string, string>; keyField: string; keyLabel: string; allKeys: string[]; title: string }
+export const OSS_SPEC: SheetSpec = {
+  headerMap: HEADER_MAP, keyField: "id_proyek", keyLabel: "Id Proyek", title: "Format Arsip OSS",
+  allKeys: COLS.map((c) => c[0]).filter((k) => k !== "no"),
+};
+export const SIC_SPEC: SheetSpec = {
+  headerMap: SIC_HEADER_MAP, keyField: "id_sicantik", keyLabel: "ID", title: "Rekap SiCantik",
+  allKeys: SIC_COLS.map((c) => c[0]),
+};
+
 /** Membaca file Excel/CSV dan menemukan baris judul kolom */
-export async function readWorkbook(file: File): Promise<ParsedSheet> {
+export async function readWorkbook(file: File, spec: SheetSpec = OSS_SPEC): Promise<ParsedSheet> {
   const buf = await file.arrayBuffer();
   const isCsv = /\.csv$/i.test(file.name);
   const wb = isCsv
@@ -25,25 +36,25 @@ export async function readWorkbook(file: File): Promise<ParsedSheet> {
   for (const name of wb.SheetNames) {
     const aoa = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[name], { header: 1, raw: true, defval: null, blankrows: false });
     for (let i = 0; i < Math.min(15, aoa.length); i++) {
-      const keys = (aoa[i] || []).map((h) => HEADER_MAP[norm(h)]);
-      if (keys.includes("id_proyek") || keys.filter(Boolean).length >= 5) {
+      const keys = (aoa[i] || []).map((h) => spec.headerMap[norm(h)]);
+      if (keys.includes(spec.keyField) || keys.filter(Boolean).length >= Math.min(5, spec.allKeys.length - 2)) {
         const map: ParsedSheet["map"] = [];
         const unknown: string[] = [];
         const seen = new Set<string>();
         (aoa[i] || []).forEach((h, j) => {
-          const k = HEADER_MAP[norm(h)];
+          const k = spec.headerMap[norm(h)];
           if (k && !seen.has(k)) { map[j] = k; seen.add(k); }
           else if (h != null && String(h).trim()) unknown.push(String(h).trim());
         });
-        if (!seen.has("id_proyek")) throw new Error("Kolom “Id Proyek” tidak ditemukan. Kolom ini wajib karena menjadi kunci arsip.");
+        if (!seen.has(spec.keyField)) throw new Error(`Kolom “${spec.keyLabel}” tidak ditemukan. Kolom ini wajib karena menjadi kunci arsip.`);
         return {
           fileName: file.name, sheet: name, headerRow: i, aoa, map, unknown, matched: [...seen],
-          missing: COLS.map((c) => c[0]).filter((k) => k !== "no" && !seen.has(k)),
+          missing: spec.allKeys.filter((k) => !seen.has(k)),
         };
       }
     }
   }
-  throw new Error("Tidak menemukan baris judul kolom (mis. “Id Proyek”, “Nib”, “Kbli”). Pastikan file mengikuti Format Arsip OSS.");
+  throw new Error(`Tidak menemukan baris judul kolom. Pastikan file mengikuti ${spec.title}.`);
 }
 
 /** Mengubah isi sheet menjadi record siap simpan + validasi */
@@ -152,3 +163,105 @@ export function exportReport(rows: Proyek[], scope: string, instansi: string) {
 }
 
 export { LABEL };
+
+/* ================= SiCantik ================= */
+export interface IzinRow { line: number; rec: Izin; problem: string; dateWarn: boolean }
+
+export function buildIzinRows(P: ParsedSheet) {
+  const rows: IzinRow[] = [];
+  const ids = new Map<string, number>();
+  for (let i = P.headerRow + 1; i < P.aoa.length; i++) {
+    const row = P.aoa[i];
+    if (!row || row.every((c) => c == null || String(c).trim() === "")) continue;
+    const raw: Record<string, unknown> = {};
+    P.map.forEach((k, j) => { if (k) raw[k] = row[j]; });
+    const rec = normalizeIzin(raw);
+    let problem = "";
+    if (!rec.id_sicantik) problem = "ID kosong";
+    else if (!rec.izin && !rec.pemohon) problem = "Izin & pemohon kosong";
+    else if (ids.has(rec.id_sicantik)) problem = `Duplikat baris ${ids.get(rec.id_sicantik)}`;
+    if (!problem) ids.set(rec.id_sicantik, i + 1);
+    const isDash = (v: unknown) => v == null || /^\s*[-–—]*\s*$/.test(String(v));
+    const dateWarn = (!isDash(raw.tanggal) && !rec.tanggal) || (!isDash(raw.tgl_penetapan) && !rec.tgl_penetapan);
+    rows.push({ line: i + 1, rec, problem, dateWarn });
+  }
+  return { rows };
+}
+
+/** Tanggal ISO → nomor seri Excel (tanpa pergeseran zona waktu) */
+const toDate = (iso: string | null) => {
+  if (!iso) return "-";
+  const [y, m, d] = iso.split("-").map(Number);
+  return Date.UTC(y, m - 1, d) / 864e5 + 25569;
+};
+function izinToSheet(r: Izin) {
+  const o: Record<string, unknown> = {};
+  for (const [k, l] of SIC_COLS) {
+    if (k === "tanggal") o[l] = toDate(r.tanggal);
+    else if (k === "tgl_penetapan") o[l] = toDate(r.tgl_penetapan);
+    else if (k === "nomor_izin") o[l] = r.nomor_izin || "-";
+    else if (k === "id_sicantik") o[l] = /^\d+$/.test(r.id_sicantik) ? Number(r.id_sicantik) : r.id_sicantik;
+    else o[l] = r[k] ?? "";
+  }
+  const d = (r.sicantik_dokumen || []).map((x) => (x.label ? x.label + ": " : "") + x.nama_file);
+  o["Arsip Dokumen"] = [r.keterangan, ...d].filter(Boolean).join("; ");
+  return o;
+}
+function sheetFromIzin(rows: Izin[]) {
+  const data = rows.map(izinToSheet);
+  const header = [...SIC_COLS.map((c) => c[1]), "Arsip Dokumen"];
+  const ws = XLSX.utils.json_to_sheet(data, { header });
+  // beri format tanggal pada kolom Tanggal & Tanggal Penetapan
+  const dateCols = ["Tanggal", "Tanggal Penetapan"].map((h) => header.indexOf(h));
+  for (let r = 1; r <= data.length; r++) for (const c of dateCols) {
+    const cell = ws[XLSX.utils.encode_cell({ r, c })];
+    if (cell && cell.t === "n") cell.z = "dd/mm/yyyy";
+  }
+  colWidths(ws, data.map((d) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k, typeof v === "number" && k.startsWith("Tanggal") ? "00/00/0000" : v]))));
+  return ws;
+}
+export function exportIzin(rows: Izin[]) {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheetFromIzin(rows), "Data SiCantik");
+  save(wb, `Arsip_SiCantik_${stamp()}.xlsx`);
+}
+export function exportIzinTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([SIC_COLS.map((c) => c[1])]);
+  ws["!cols"] = SIC_COLS.map((c) => ({ wch: Math.max(12, c[1].length + 4) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Rekap SiCantik");
+  save(wb, "Template_Rekap_SiCantik.xlsx");
+}
+export function exportIzinReport(rows: Izin[], scope: string, instansi: string) {
+  const wb = XLSX.utils.book_new();
+  const all = groupIzin(rows, () => "Semua")[0];
+  const avg = all ? avgLama(all) : null;
+  const ws0 = XLSX.utils.aoa_to_sheet([
+    ["LAPORAN PERMOHONAN IZIN SICANTIK"], [instansi], ["Cakupan", scope], ["Dicetak", new Date().toLocaleString("id-ID")], [],
+    ["Indikator", "Nilai"], ["Jumlah permohonan", rows.length], ["Sudah ditetapkan", all?.terbit || 0], ["Belum ditetapkan", rows.length - (all?.terbit || 0)],
+    ["Permohonan baru", all?.baru || 0], ["Perpanjangan", all?.perpanjangan || 0], ["Perubahan", all?.perubahan || 0], ["Pencabutan", all?.pencabutan || 0],
+    ["Pemohon unik", new Set(rows.map((r) => r.no_ktp || r.pemohon.toLowerCase())).size],
+    ["Rata-rata lama proses (hari)", avg == null ? "-" : Math.round(avg * 10) / 10],
+  ]);
+  ws0["!cols"] = [{ wch: 32 }, { wch: 40 }];
+  XLSX.utils.book_append_sheet(wb, ws0, "Ringkasan");
+  const rekap = (name: string, groups: ReturnType<typeof groupIzin>) => {
+    const data = groups.sort((a, b) => b.total - a.total).map((g) => ({
+      [name]: g.label, Jumlah: g.total, Baru: g.baru, Perpanjangan: g.perpanjangan, Perubahan: g.perubahan, Pencabutan: g.pencabutan,
+      "Sudah ditetapkan": g.terbit, "Belum ditetapkan": g.total - g.terbit, "Rata-rata proses (hari)": avgLama(g) == null ? "" : Math.round(avgLama(g)! * 10) / 10,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    colWidths(ws, data);
+    return ws;
+  };
+  XLSX.utils.book_append_sheet(wb, rekap("Jenis izin", groupIzin(rows, (r) => r.izin, (r) => izinShort(r.izin))), "Per Jenis Izin");
+  XLSX.utils.book_append_sheet(wb, rekap("Kategori", groupIzin(rows, (r) => kategoriIzin(r.izin))), "Per Kategori");
+  const bulan = groupIzin(rows, (r) => (isISO(r.tanggal) ? r.tanggal.slice(0, 7) : "")).sort((a, b) => a.key.localeCompare(b.key));
+  const wsb = rekap("Bulan permohonan", bulan);
+  XLSX.utils.book_append_sheet(wb, wsb, "Per Bulan");
+  XLSX.utils.book_append_sheet(wb, rekap("Lokasi", groupIzin(rows.filter((r) => r.lokasi), (r) => lokasiKey(r.lokasi), (r) => r.lokasi.trim())), "Per Lokasi");
+  const pending = rows.filter((r) => statusOf(r) === "Belum ditetapkan");
+  XLSX.utils.book_append_sheet(wb, sheetFromIzin(pending), "Belum Ditetapkan");
+  XLSX.utils.book_append_sheet(wb, sheetFromIzin(rows), "Data");
+  save(wb, `Laporan_SiCantik_${stamp()}.xlsx`);
+}

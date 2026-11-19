@@ -1,11 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Group, MonthPoint, Metric } from "../lib/stats";
+import type { MonthPoint, Metric as OssMetric } from "../lib/stats";
+type Metric = OssMetric | "izin" | "hari";
+interface Item { key: string; value: number; label?: string }
 import { fmtCompact, fmtInt, fmtPct, fmtRp, fmtRpShort } from "../lib/format";
 
 export const METRICS: Record<Metric, { label: string; fmt: (n: number) => string; short: (n: number) => string; col: string }> = {
   proyek: { label: "Jumlah proyek", fmt: (n) => fmtInt(n) + " proyek", short: fmtInt, col: "Proyek" },
   investasi: { label: "Nilai investasi", fmt: fmtRp, short: fmtRpShort, col: "Investasi" },
   tki: { label: "Tenaga kerja", fmt: (n) => fmtInt(n) + " orang", short: fmtInt, col: "TKI" },
+  izin: { label: "Jumlah permohonan", fmt: (n) => fmtInt(n) + " permohonan", short: fmtInt, col: "Jumlah" },
+  hari: { label: "Rata-rata lama proses", fmt: (n) => n.toLocaleString("id-ID", { maximumFractionDigits: 1 }) + " hari", short: (n) => n.toLocaleString("id-ID", { maximumFractionDigits: 1 }) + " hr", col: "Hari" },
 };
 
 /** Tooltip tunggal untuk semua elemen ber-atribut data-tip ("Judul|isi") */
@@ -37,11 +41,12 @@ export function Empty({ text = "Belum ada data" }: { text?: string }) {
   return <div className="empty">{text}</div>;
 }
 
-export function HBar({ items, metric, total, maxRows = 10 }: { items: Group[]; metric: Metric; total: number; maxRows?: number }) {
+export function HBar({ items, metric, total, maxRows = 10, showPct = true, other = true }: { items: Item[]; metric: Metric; total: number; maxRows?: number; showPct?: boolean; other?: boolean }) {
   if (!items.length) return <Empty />;
   const sorted = [...items].sort((a, b) => b.value - a.value);
-  let rows: { key: string; value: number; other?: boolean }[] = sorted;
-  if (sorted.length > maxRows) {
+  let rows: (Item & { other?: boolean })[] = sorted;
+  if (sorted.length > maxRows && !other) rows = sorted.slice(0, maxRows);
+  else if (sorted.length > maxRows) {
     const rest = sorted.slice(maxRows - 1);
     rows = [...sorted.slice(0, maxRows - 1), { key: `Lainnya (${rest.length})`, value: rest.reduce((s, x) => s + x.value, 0), other: true }];
   }
@@ -50,8 +55,8 @@ export function HBar({ items, metric, total, maxRows = 10 }: { items: Group[]; m
   return (
     <div className="hb">
       {rows.map((r) => (
-        <div className="hb-row" key={r.key} data-tip={`${r.key}|${M.fmt(r.value)} · ${fmtPct(total ? (r.value / total) * 100 : 0)}`}>
-          <div className="hb-l" title={r.key}>{r.key}</div>
+        <div className="hb-row" key={r.key} data-tip={`${r.label ?? r.key}|${M.fmt(r.value)}${showPct ? ` · ${fmtPct(total ? (r.value / total) * 100 : 0)}` : ""}`}>
+          <div className="hb-l" title={r.label ?? r.key}>{r.label ?? r.key}</div>
           <div className="hb-t"><div className={"hb-b" + (r.other ? " other" : "")} style={{ width: `${(r.value / max) * 100}%` }} /></div>
           <div className="hb-v">{M.short(r.value)}</div>
         </div>
@@ -60,7 +65,7 @@ export function HBar({ items, metric, total, maxRows = 10 }: { items: Group[]; m
   );
 }
 
-export function SegBar({ order, colors, groups, metric }: { order: string[]; colors: Record<string, [string, string]>; groups: Group[]; metric: Metric }) {
+export function SegBar({ order, colors, groups, metric }: { order: string[]; colors: Record<string, [string, string]>; groups: Item[]; metric: Metric }) {
   const map = new Map(groups.map((g) => [g.key, g.value]));
   const parts = [
     ...order.map((k) => ({ key: k, value: map.get(k) || 0, c: colors[k] })),

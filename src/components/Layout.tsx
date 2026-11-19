@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Archive, LayoutDashboard, LogOut, Moon, PlusCircle, Sun, Table2, Upload, UserCog, KeyRound } from "lucide-react";
+import { Archive, Building2, FileBadge, Home, LayoutDashboard, LogOut, Moon, PlusCircle, Sun, Table2, Upload, UserCog, KeyRound } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { useData } from "../context/DataContext";
+import { useData, useSicantik } from "../context/DataContext";
 import { useUI } from "../context/UIContext";
 import { NAMA_INSTANSI } from "../lib/columns";
 import { fmtInt } from "../lib/format";
@@ -23,35 +23,58 @@ export function useTheme() {
 
 export function Layout() {
   const { profile, canWrite, isAdmin, session } = useAuth();
-  const { rows, loaded } = useData();
+  const oss = useData();
+  const sic = useSicantik();
   const { toast } = useUI();
   const { isDark, toggle } = useTheme();
   const [pwOpen, setPwOpen] = useState(false);
   const loc = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
 
-  const nav = [
-    { to: "/", label: "Dashboard", icon: LayoutDashboard, show: true, end: true },
-    { to: "/data", label: "Data Arsip", icon: Table2, show: true },
-    { to: "/input", label: "Input Data", icon: PlusCircle, show: canWrite },
-    { to: "/import", label: "Import Excel", icon: Upload, show: canWrite },
+  const moduleNav = (base: string) => [
+    { to: base, label: "Dashboard", icon: LayoutDashboard, show: true, end: true },
+    { to: `${base}/data`, label: "Data Arsip", icon: Table2, show: true },
+    { to: `${base}/input`, label: "Input Data", icon: PlusCircle, show: canWrite },
+    { to: `${base}/import`, label: "Import Excel", icon: Upload, show: canWrite },
+  ].filter((n) => n.show);
+  const sections = [
+    { title: "OSS RBA", base: "/oss", items: moduleNav("/oss") },
+    { title: "SiCantik", base: "/sicantik", items: moduleNav("/sicantik") },
+  ];
+  const bottom = [
+    { to: "/", label: "Beranda", icon: Home, end: true, show: true },
+    { to: "/oss", label: "OSS", icon: Building2, show: true },
+    { to: "/sicantik", label: "SiCantik", icon: FileBadge, show: true },
     { to: "/pengguna", label: "Pengguna", icon: UserCog, show: isAdmin },
   ].filter((n) => n.show);
+  const current = sections.find((sct) => loc.pathname === sct.base || loc.pathname.startsWith(sct.base + "/"));
 
   return (
     <div className="app">
       <aside className="side">
         <div className="brand">
           <span className="brand-mark"><Archive size={20} /></span>
-          <div><b>Arsip Digital OSS</b><small>{NAMA_INSTANSI}</small></div>
+          <div><b>Arsip Digital</b><small>OSS RBA · SiCantik</small></div>
         </div>
         <nav className="nav-list" aria-label="Menu utama">
-          {nav.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className="nav"><n.icon size={18} />{n.label}</NavLink>
+          <NavLink to="/" end className="nav"><Home size={18} />Beranda</NavLink>
+          {sections.map((sct) => (
+            <div key={sct.base} className="nav-sec">
+              <div className="nav-title">{sct.title}</div>
+              {sct.items.map((n) => (
+                <NavLink key={n.to} to={n.to} end={n.end} className="nav"><n.icon size={18} />{n.label}</NavLink>
+              ))}
+            </div>
           ))}
+          {isAdmin && (
+            <div className="nav-sec">
+              <div className="nav-title">Pengaturan</div>
+              <NavLink to="/pengguna" className="nav"><UserCog size={18} />Pengguna</NavLink>
+            </div>
+          )}
         </nav>
         <div className="side-foot">
-          <div className="side-stat">{loaded ? `${fmtInt(rows.length)} proyek terarsip` : "Memuat…"}</div>
+          <div className="side-stat">{oss.loaded && sic.loaded ? `${fmtInt(oss.rows.length)} proyek OSS · ${fmtInt(sic.rows.length)} izin SiCantik` : "Memuat…"}</div>
           <div className="me">
             <div className="avatar">{(profile?.nama || session?.user.email || "?").slice(0, 1).toUpperCase()}</div>
             <div className="me-t">
@@ -69,18 +92,27 @@ export function Layout() {
 
       <header className="topbar">
         <span className="brand-mark sm"><Archive size={17} /></span>
-        <b>Arsip Digital OSS</b>
+        <b>Arsip Digital</b>
         <span style={{ flex: 1 }} />
         <button className="icon-btn" onClick={toggle} aria-label="Ganti tema">{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
         <button className="icon-btn" onClick={() => setPwOpen(true)} aria-label="Ganti kata sandi"><KeyRound size={18} /></button>
         <button className="icon-btn" onClick={() => api.signOut()} aria-label="Keluar"><LogOut size={18} /></button>
       </header>
 
-      <main className="main"><Outlet /></main>
+      <main className="main">
+        {current && (
+          <nav className="modtabs" aria-label={`Menu ${current.title}`}>
+            {current.items.map((n) => (
+              <NavLink key={n.to} to={n.to} end={n.end} className="modtab">{n.label.replace(" Arsip", "").replace(" Data", "").replace(" Excel", "")}</NavLink>
+            ))}
+          </nav>
+        )}
+        <Outlet />
+      </main>
 
       <nav className="bottomnav" aria-label="Menu">
-        {nav.map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end} className="bn"><n.icon size={20} /><span>{n.label.replace(" Data", "").replace(" Excel", "")}</span></NavLink>
+        {bottom.map((n) => (
+          <NavLink key={n.to} to={n.to} end={n.end} className="bn"><n.icon size={20} /><span>{n.label}</span></NavLink>
         ))}
       </nav>
 

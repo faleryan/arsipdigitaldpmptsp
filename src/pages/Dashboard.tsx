@@ -61,7 +61,7 @@ export default function Dashboard() {
     <>
       <StatusBanner />
       <div className="head">
-        <div><h1>Dashboard Laporan OSS</h1><p>{scope} · berdasarkan tanggal pengajuan proyek</p></div>
+        <div><h1>Dashboard OSS RBA</h1><p>{scope} · berdasarkan tanggal pengajuan proyek</p></div>
         <div className="head-actions"><button className="btn" onClick={download} disabled={!rows.length}><Download size={16} />Unduh laporan Excel</button></div>
       </div>
 
@@ -88,7 +88,7 @@ export default function Dashboard() {
           <FolderCheck size={40} />
           <b>Belum ada data arsip</b>
           <span>Mulai dengan mengimpor file Excel hasil unduhan OSS atau tambahkan data secara manual.</span>
-          {canWrite && <div className="row-gap"><Link className="btn primary" to="/import">Import Excel</Link><Link className="btn" to="/input">Input manual</Link></div>}
+          {canWrite && <div className="row-gap"><Link className="btn primary" to="/oss/import">Import Excel</Link><Link className="btn" to="/oss/input">Input manual</Link></div>}
         </div></div>
       ) : (
         <>

@@ -90,10 +90,10 @@ export default function DataArsip() {
     <>
       <StatusBanner />
       <div className="head">
-        <div><h1>Data Arsip OSS</h1><p>{fmtInt(rows.length)} dari {fmtInt(all.length)} proyek ditampilkan</p></div>
+        <div><h1>Data Arsip OSS RBA</h1><p>{fmtInt(rows.length)} dari {fmtInt(all.length)} proyek ditampilkan</p></div>
         <div className="head-actions">
           <button className="btn" onClick={exportXlsx} disabled={!rows.length}><Download size={16} />Export Excel</button>
-          {canWrite && <Link className="btn primary" to="/input"><PlusCircle size={16} />Tambah data</Link>}
+          {canWrite && <Link className="btn primary" to="/oss/input"><PlusCircle size={16} />Tambah data</Link>}
         </div>
       </div>
 
@@ -113,7 +113,7 @@ export default function DataArsip() {
 
       <div className="card">
         {!all.length ? (
-          <div className="empty big"><b>Belum ada data</b>{canWrite && <span><Link to="/import">Import Excel</Link> atau <Link to="/input">input manual</Link>.</span>}</div>
+          <div className="empty big"><b>Belum ada data</b>{canWrite && <span><Link to="/oss/import">Import Excel</Link> atau <Link to="/oss/input">input manual</Link>.</span>}</div>
         ) : !rows.length ? (
           <div className="empty big">Tidak ada data yang cocok dengan pencarian/filter.</div>
         ) : (

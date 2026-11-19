@@ -2,7 +2,8 @@
 
 export interface Dokumen {
   id: string;
-  id_proyek: string;
+  id_proyek?: string;
+  id_sicantik?: string;
   label: string;
   nama_file: string;
   path: string;

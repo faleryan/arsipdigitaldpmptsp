@@ -1,6 +1,7 @@
 // Lapisan akses data — semua komunikasi dengan Supabase ada di file ini.
 import { createClient, type Session } from "@supabase/supabase-js";
 import type { Dokumen, Proyek } from "./columns";
+import type { Izin } from "./sicantik";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -83,12 +84,10 @@ export async function fetchAll(): Promise<Proyek[]> {
 }
 
 /** Berlangganan perubahan data (realtime). Mengembalikan fungsi untuk berhenti. */
-export function subscribe(onChange: () => void) {
-  const ch = sb()
-    .channel("oss-changes")
-    .on("postgres_changes", { event: "*", schema: "public", table: "oss_proyek" }, onChange)
-    .on("postgres_changes", { event: "*", schema: "public", table: "oss_dokumen" }, onChange)
-    .subscribe();
+export function subscribe(name: string, tables: string[], onChange: () => void) {
+  let ch = sb().channel(name);
+  for (const table of tables) ch = ch.on("postgres_changes", { event: "*", schema: "public", table }, onChange);
+  ch.subscribe();
   return () => { sb().removeChannel(ch); };
 }
 
@@ -137,16 +136,76 @@ export async function upsertBatch(
   }
 }
 
-/* ---------------- Dokumen ---------------- */
-export async function uploadDokumen(id_proyek: string, file: File, label: string): Promise<Dokumen> {
+/* ---------------- Data SiCantik ---------------- */
+export async function fetchAllSicantik(): Promise<Izin[]> {
+  const out: Izin[] = [];
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    const { data, error } = await sb().from("sicantik_izin").select("*, sicantik_dokumen(*)").order("id_sicantik").range(from, from + size - 1);
+    if (error) throw error;
+    out.push(...((data || []) as Izin[]));
+    if (!data || data.length < size) break;
+  }
+  return out;
+}
+const stripIzin = (r: Partial<Izin>) => {
+  const o: Record<string, unknown> = { ...r };
+  delete o.sicantik_dokumen; delete o.created_at; delete o.updated_at;
+  return o;
+};
+export async function insertIzin(rec: Izin) {
+  const { error } = await sb().from("sicantik_izin").insert({ ...stripIzin(rec), sumber: "manual" });
+  if (error) throw error;
+}
+export async function updateIzin(id: string, rec: Partial<Izin>) {
+  const { error } = await sb().from("sicantik_izin").update(stripIzin(rec)).eq("id_sicantik", id);
+  if (error) throw error;
+}
+export async function deleteIzin(id: string, docs: Dokumen[] = []) {
+  if (docs.length) await sb().storage.from(BUCKET).remove(docs.map((d) => d.path));
+  const { error } = await sb().from("sicantik_izin").delete().eq("id_sicantik", id);
+  if (error) throw error;
+}
+export async function deleteAllIzin(rows: Izin[], onProgress?: (done: number, total: number) => void) {
+  const paths = rows.flatMap((r) => (r.sicantik_dokumen || []).map((d) => d.path));
+  for (let i = 0; i < paths.length; i += 500) await sb().storage.from(BUCKET).remove(paths.slice(i, i + 500));
+  const ids = rows.map((r) => r.id_sicantik);
+  for (let i = 0; i < ids.length; i += 200) {
+    const { error } = await sb().from("sicantik_izin").delete().in("id_sicantik", ids.slice(i, i + 200));
+    if (error) throw error;
+    onProgress?.(Math.min(i + 200, ids.length), ids.length);
+  }
+}
+export async function upsertIzinBatch(
+  rows: Izin[],
+  opts: { skipExisting: boolean; fileName: string },
+  onProgress?: (done: number, total: number) => void,
+) {
+  const size = 300;
+  for (let i = 0; i < rows.length; i += size) {
+    const chunk = rows.slice(i, i + size).map((r) => ({ ...stripIzin(r), sumber: "import", file_import: opts.fileName }));
+    const { error } = await sb().from("sicantik_izin").upsert(chunk, { onConflict: "id_sicantik", ignoreDuplicates: opts.skipExisting });
+    if (error) throw error;
+    onProgress?.(Math.min(i + size, rows.length), rows.length);
+  }
+}
+
+/* ---------------- Dokumen (OSS & SiCantik) ---------------- */
+export type DocKind = "oss" | "sicantik";
+const DOC_TABLE: Record<DocKind, { table: string; fk: string }> = {
+  oss: { table: "oss_dokumen", fk: "id_proyek" },
+  sicantik: { table: "sicantik_dokumen", fk: "id_sicantik" },
+};
+export async function uploadDokumen(kind: DocKind, id: string, file: File, label: string): Promise<Dokumen> {
   const safe = file.name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80);
-  const folder = id_proyek.replace(/[^A-Za-z0-9._-]+/g, "_");
-  const path = `${folder}/${Date.now()}-${safe}`;
+  const folder = id.replace(/[^A-Za-z0-9._-]+/g, "_");
+  const path = `${kind}/${folder}/${Date.now()}-${safe}`;
   const up = await sb().storage.from(BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
   if (up.error) throw up.error;
+  const t = DOC_TABLE[kind];
   const { data, error } = await sb()
-    .from("oss_dokumen")
-    .insert({ id_proyek, label, nama_file: file.name, path, ukuran: file.size, tipe: file.type })
+    .from(t.table)
+    .insert({ [t.fk]: id, label, nama_file: file.name, path, ukuran: file.size, tipe: file.type })
     .select()
     .single();
   if (error) {
@@ -155,9 +214,9 @@ export async function uploadDokumen(id_proyek: string, file: File, label: string
   }
   return data as Dokumen;
 }
-export async function deleteDokumen(doc: Dokumen) {
+export async function deleteDokumen(kind: DocKind, doc: Dokumen) {
   await sb().storage.from(BUCKET).remove([doc.path]);
-  const { error } = await sb().from("oss_dokumen").delete().eq("id", doc.id);
+  const { error } = await sb().from(DOC_TABLE[kind].table).delete().eq("id", doc.id);
   if (error) throw error;
 }
 /** Tautan sementara (1 jam) untuk membuka dokumen privat */

@@ -8,12 +8,17 @@ import { TooltipLayer } from "./components/Charts";
 import { configured, signOut } from "./lib/api";
 import { Loading } from "./components/Loading";
 import Login from "./pages/Login";
+import Beranda from "./pages/Beranda";
 import Dashboard from "./pages/Dashboard";
 import DataArsip from "./pages/DataArsip";
+import SicantikDashboard from "./pages/sicantik/Dashboard";
+import SicantikData from "./pages/sicantik/Data";
 
 const InputData = lazy(() => import("./pages/InputData"));
 const ImportExcel = lazy(() => import("./pages/ImportExcel"));
 const Pengguna = lazy(() => import("./pages/Pengguna"));
+const SicantikInput = lazy(() => import("./pages/sicantik/Input"));
+const SicantikImport = lazy(() => import("./pages/sicantik/Import"));
 
 
 function NotConfigured() {
@@ -53,11 +58,21 @@ function Gate() {
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="data" element={<DataArsip />} />
-            <Route path="input" element={W(<InputData />)} />
-            <Route path="input/:id" element={W(<InputData />)} />
-            <Route path="import" element={W(<ImportExcel />)} />
+            <Route index element={<Beranda />} />
+            <Route path="oss" element={<Dashboard />} />
+            <Route path="oss/data" element={<DataArsip />} />
+            <Route path="oss/input" element={W(<InputData />)} />
+            <Route path="oss/input/:id" element={W(<InputData />)} />
+            <Route path="oss/import" element={W(<ImportExcel />)} />
+            <Route path="sicantik" element={<SicantikDashboard />} />
+            <Route path="sicantik/data" element={<SicantikData />} />
+            <Route path="sicantik/input" element={W(<SicantikInput />)} />
+            <Route path="sicantik/input/:id" element={W(<SicantikInput />)} />
+            <Route path="sicantik/import" element={W(<SicantikImport />)} />
+            {/* alamat lama */}
+            <Route path="data" element={<Navigate to="/oss/data" replace />} />
+            <Route path="input" element={<Navigate to="/oss/input" replace />} />
+            <Route path="import" element={<Navigate to="/oss/import" replace />} />
             <Route path="pengguna" element={isAdmin ? <Pengguna /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

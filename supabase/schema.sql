@@ -1,5 +1,5 @@
 -- =====================================================================
---  ARSIP DIGITAL OSS — Skema database Supabase
+--  ARSIP DIGITAL OSS & SICANTIK — Skema database Supabase
 --  Jalankan seluruh isi file ini sekali di Supabase: SQL Editor > New query > Run
 --  Aman dijalankan ulang (idempotent).
 -- =====================================================================
@@ -190,4 +190,77 @@ do $$
 begin
   begin alter publication supabase_realtime add table public.oss_proyek;  exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.oss_dokumen; exception when duplicate_object then null; end;
+end $$;
+
+-- ---------- 7. Data permohonan izin SiCantik (mengikuti Rekap_SIcantik.xlsx) ----------
+create table if not exists public.sicantik_izin (
+  id_sicantik     text primary key,                -- ID (dari SiCantik) atau ID manual
+  izin            text not null default '',        -- Izin (jenis izin)
+  nomor_izin      text not null default '',        -- Nomor izin ('' = belum ditetapkan)
+  jenis           text not null default '',        -- Jenis: Baru / Perpanjangan / Perubahan / Pencabutan
+  tanggal         date,                            -- Tanggal permohonan
+  pemohon         text not null default '',
+  lokasi          text not null default '',
+  no_permohonan   text not null default '',
+  no_ktp          text not null default '',
+  no_hp           text not null default '',
+  email           text not null default '',
+  tgl_penetapan   date,                            -- Tanggal Penetapan
+  lokasi_izin     text not null default '',
+  keterangan      text not null default '',        -- tautan/keterangan arsip
+  sumber          text not null default 'manual',
+  file_import     text,
+  created_at      timestamptz not null default now(),
+  created_by      uuid references auth.users(id) on delete set null,
+  updated_at      timestamptz not null default now(),
+  updated_by      uuid references auth.users(id) on delete set null
+);
+create index if not exists sicantik_tanggal_idx on public.sicantik_izin (tanggal);
+create index if not exists sicantik_izin_idx on public.sicantik_izin (izin);
+create index if not exists sicantik_ktp_idx on public.sicantik_izin (no_ktp);
+
+drop trigger if exists sicantik_touch on public.sicantik_izin;
+create trigger sicantik_touch before insert or update on public.sicantik_izin
+  for each row execute function public.touch_updated_at();
+
+create table if not exists public.sicantik_dokumen (
+  id           uuid primary key default gen_random_uuid(),
+  id_sicantik  text not null references public.sicantik_izin(id_sicantik) on delete cascade on update cascade,
+  label        text not null default '',
+  nama_file    text not null,
+  path         text not null,
+  ukuran       bigint,
+  tipe         text,
+  uploaded_by  uuid references auth.users(id) on delete set null default auth.uid(),
+  created_at   timestamptz not null default now()
+);
+create index if not exists sicantik_dokumen_idx on public.sicantik_dokumen (id_sicantik);
+
+alter table public.sicantik_izin    enable row level security;
+alter table public.sicantik_dokumen enable row level security;
+
+drop policy if exists "sicantik: baca" on public.sicantik_izin;
+create policy "sicantik: baca" on public.sicantik_izin
+  for select to authenticated using (public.app_role() in ('admin','operator','viewer'));
+drop policy if exists "sicantik: tambah" on public.sicantik_izin;
+create policy "sicantik: tambah" on public.sicantik_izin
+  for insert to authenticated with check (public.app_role() in ('admin','operator'));
+drop policy if exists "sicantik: ubah" on public.sicantik_izin;
+create policy "sicantik: ubah" on public.sicantik_izin
+  for update to authenticated using (public.app_role() in ('admin','operator')) with check (public.app_role() in ('admin','operator'));
+drop policy if exists "sicantik: hapus" on public.sicantik_izin;
+create policy "sicantik: hapus" on public.sicantik_izin
+  for delete to authenticated using (public.app_role() in ('admin','operator'));
+
+drop policy if exists "sicantik dokumen: baca" on public.sicantik_dokumen;
+create policy "sicantik dokumen: baca" on public.sicantik_dokumen
+  for select to authenticated using (public.app_role() in ('admin','operator','viewer'));
+drop policy if exists "sicantik dokumen: tulis" on public.sicantik_dokumen;
+create policy "sicantik dokumen: tulis" on public.sicantik_dokumen
+  for all to authenticated using (public.app_role() in ('admin','operator')) with check (public.app_role() in ('admin','operator'));
+
+do $$
+begin
+  begin alter publication supabase_realtime add table public.sicantik_izin;    exception when duplicate_object then null; end;
+  begin alter publication supabase_realtime add table public.sicantik_dokumen; exception when duplicate_object then null; end;
 end $$;
