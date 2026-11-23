@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Banknote, Building2, Download, FolderCheck, Users, Briefcase } from "lucide-react";
 import { useData, useKbli } from "../context/DataContext";
 import { titleCase } from "../lib/master";
+import { BeluMap, KECAMATAN_PETA } from "../components/BeluMap";
 import { useAuth } from "../context/AuthContext";
 import { useUI } from "../context/UIContext";
 import { Columns, HBar, METRICS, SegBar } from "../components/Charts";
@@ -23,7 +24,7 @@ export default function Dashboard() {
   const [metric, setMetric] = useState<Metric>("proyek");
 
   const years = useMemo(() => [...new Set(all.map(yearOf).filter(Boolean))].sort().reverse(), [all]);
-  const kecs = useMemo(() => [...new Set(all.map((r) => kecLabel(r.kec_usaha)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "id")), [all]);
+  const kecs = useMemo(() => [...new Set([...KECAMATAN_PETA, ...all.map((r) => kecLabel(r.kec_usaha)).filter(Boolean)])].sort((a, b) => a.localeCompare(b, "id")), [all]);
   const rows = useMemo(() => all.filter((r) => {
     if (year !== "all" && yearOf(r) !== year) return false;
     if (month !== "all" && (!isISO(r.tgl_pengajuan) || +r.tgl_pengajuan.slice(5, 7) !== +month)) return false;
@@ -44,7 +45,17 @@ export default function Dashboard() {
   const period = year === "all" ? "Semua periode" : month === "all" ? `Tahun ${year}` : `${BULAN[+month - 1]} ${year}`;
   const scope = period + (kec === "all" ? " · seluruh kecamatan" : ` · Kec. ${kec}`);
 
-  const byKec = useMemo(() => groupBy(rows, (r) => kecLabel(r.kec_usaha), metric), [rows, metric]);
+  // peta memakai filter periode saja (bukan filter kecamatan) agar semua kecamatan terlihat
+  const periodRows = useMemo(() => all.filter((r) => {
+    if (year !== "all" && yearOf(r) !== year) return false;
+    if (month !== "all" && (!isISO(r.tgl_pengajuan) || +r.tgl_pengajuan.slice(5, 7) !== +month)) return false;
+    return true;
+  }), [all, year, month]);
+  const byKec = useMemo(() => groupBy(periodRows, (r) => kecLabel(r.kec_usaha), metric), [periodRows, metric]);
+  const kecValues = useMemo(() => new Map(byKec.map((g) => [g.key, g.value])), [byKec]);
+  const periodTotal = byKec.reduce((a, g) => a + g.value, 0);
+  const luarPeta = byKec.filter((g) => !KECAMATAN_PETA.includes(g.key));
+  const pickKec = (k: string) => setKec(kec === k ? "all" : k);
   const bySektor = useMemo(() => groupBy(rows, (r) => (r.sektor || "").replace(/^Kementerian\s+/i, "Kem. ").replace(/\s+/g, " "), metric), [rows, metric]);
   const byJenis = useMemo(() => groupBy(rows, (r) => (r.jenis_perusahaan || "").replace("Persekutuan Komanditer (CV / Commanditaire Vennootschap)", "CV (Persekutuan Komanditer)"), metric), [rows, metric]);
   const kbli = useMemo(() => groupBy(rows, (r) => r.kbli, metric).sort((a, b) => b.value - a.value).slice(0, 10), [rows, metric]);
@@ -110,10 +121,19 @@ export default function Dashboard() {
               <div className="sub">{fmtInt(s.arsip)} dari {fmtInt(rows.length)} berdokumen</div></div>
           </div>
 
-          <div className="grid32">
-            <div className="card"><div className="card-h"><h3>Tren pengajuan proyek per bulan</h3><span>{M.label}</span></div><div className="card-b"><Columns series={monthSeries(rows, metric)} metric={metric} /></div></div>
-            <div className="card"><div className="card-h"><h3>Sebaran per kecamatan usaha</h3><span>{M.label}</span></div><div className="card-b"><HBar items={byKec} metric={metric} total={total} maxRows={12} /></div></div>
+          <div className="card map-card">
+            <div className="card-h"><h3>Peta sebaran per kecamatan usaha · Kabupaten Belu</h3><span>{M.label} · {period} · klik kecamatan untuk memfilter dashboard</span></div>
+            <div className="card-b map-grid">
+              <BeluMap values={kecValues} fmt={M.fmt} short={M.short} unit={M.label} selected={kec} onSelect={pickKec} />
+              <div className="map-side">
+                <HBar items={byKec} metric={metric} total={periodTotal} maxRows={14} onPick={(k) => KECAMATAN_PETA.includes(k) && pickKec(k)} active={kec} />
+                {luarPeta.length > 0 && <p className="cell-sub">{luarPeta.map((g) => `${g.key}: ${M.short(g.value)}`).join(" · ")} — tidak tergambar di peta.</p>}
+                {kec !== "all" && <button className="btn sm" onClick={() => setKec("all")}>Tampilkan semua kecamatan</button>}
+                <p className="map-src">Batas wilayah kecamatan: Kemendagri (2020), disederhanakan untuk tampilan.</p>
+              </div>
+            </div>
           </div>
+          <div className="card" style={{ marginBottom: 16 }}><div className="card-h"><h3>Tren pengajuan proyek per bulan</h3><span>{M.label}</span></div><div className="card-b"><Columns series={monthSeries(rows, metric)} metric={metric} /></div></div>
           <div className="grid2">
             <div className="card"><div className="card-h"><h3>Tingkat risiko proyek</h3><span>{M.label}</span></div><div className="card-b"><SegBar order={RISIKO} colors={RISIKO_COLOR} groups={groupBy(rows, (r) => r.risiko, metric)} metric={metric} /></div></div>
             <div className="card"><div className="card-h"><h3>Skala usaha</h3><span>{M.label}</span></div><div className="card-b"><SegBar order={SKALA} colors={SKALA_COLOR} groups={groupBy(rows, (r) => r.skala_usaha, metric)} metric={metric} /></div></div>

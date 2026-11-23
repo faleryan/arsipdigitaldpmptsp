@@ -16,7 +16,13 @@
   --font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+:root {
+  --m0: #e8e7e2; --m1: #cfe0f7; --m2: #9ec5f4; --m3: #5598e7; --m4: #2a78d6; --m5: #184f95;
+  --m-stroke: #fcfcfb;
+}
 :root[data-theme="dark"] {
+  --m0: #2a2a28; --m1: #1d3352; --m2: #1f4f8a; --m3: #2a6fc4; --m4: #4f92e6; --m5: #9ec5f4;
+  --m-stroke: #1a1a19;
   color-scheme: dark;
   --page: #0d0d0d; --surface: #1a1a19; --surface-2: #242422; --surface-3: #2e2e2b;
   --sidebar: #111a27; --sidebar-2: #18263a; --sidebar-ink: #b4c1d3; --sidebar-active: rgba(255, 255, 255, .08);
@@ -492,3 +498,36 @@ button.chip-stat:hover, button.chip-stat.on { border-color: var(--accent); backg
 textarea.inp { resize: vertical; min-height: 80px; font-family: inherit; }
 .syarat-box { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); font-size: 13px; }
 .syarat-box .syarat { margin-top: 8px; }
+
+/* ---------- Peta Kabupaten Belu ---------- */
+.map-card { margin-bottom: 16px; }
+.map-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(260px, 1fr); gap: 20px; align-items: start; }
+.belu-map svg { width: 100%; height: auto; display: block; }
+.kec { stroke: var(--m-stroke); stroke-width: 1.4; cursor: pointer; transition: filter .15s; outline: none; }
+.kec.m0 { fill: var(--m0); } .kec.m1 { fill: var(--m1); } .kec.m2 { fill: var(--m2); } .kec.m3 { fill: var(--m3); } .kec.m4 { fill: var(--m4); } .kec.m5 { fill: var(--m5); }
+.kec.hv, .kec:focus-visible { filter: brightness(1.08) saturate(1.1); stroke: var(--ink); stroke-width: 2; }
+.kec.on { stroke: #eda100; stroke-width: 3; }
+.kec-label text { font-family: var(--font); paint-order: stroke; stroke-width: 3px; stroke-linejoin: round; }
+.kec-label .nm { font-weight: 500; }
+.kec-label .vl { font-weight: 800; }
+.kec-label.ink-dark text { fill: #0b0b0b; stroke: rgba(255,255,255,.55); }
+.kec-label.ink-light text { fill: #fff; stroke: rgba(0,0,0,.25); }
+:root[data-theme="dark"] .kec-label.ink-dark text { fill: #f0efec; stroke: rgba(0,0,0,.5); }
+:root[data-theme="dark"] .kec-label.ink-light text { fill: #0b0b0b; stroke: rgba(255,255,255,.4); }
+.ctx { font-size: 11px; fill: var(--muted); font-style: italic; letter-spacing: .3px; }
+.inset-mark { fill: none; stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 2; }
+.inset-line { stroke: var(--ink-2); stroke-width: .8; stroke-dasharray: 3 2; }
+.inset-bg { fill: var(--surface); stroke: var(--border-2); }
+.inset-title { font-size: 10.5px; fill: var(--ink-2); font-weight: 600; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
+.map-legend .lg-t { font-weight: 600; color: var(--ink); }
+.map-legend span { display: inline-flex; gap: 5px; align-items: center; }
+.map-legend i { width: 14px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid var(--border); }
+.map-legend i.m0 { background: var(--m0); } .map-legend i.m1 { background: var(--m1); } .map-legend i.m2 { background: var(--m2); }
+.map-legend i.m3 { background: var(--m3); } .map-legend i.m4 { background: var(--m4); } .map-legend i.m5 { background: var(--m5); }
+.map-side { display: flex; flex-direction: column; gap: 10px; }
+.map-src { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
+.hb-row.pick { cursor: pointer; }
+.hb-row.on { background: color-mix(in srgb, #eda100 16%, var(--surface)); }
+.hb-row.on .hb-l { color: var(--ink); font-weight: 700; }
+@media (max-width: 1100px) { .map-grid { grid-template-columns: 1fr; } }

@@ -41,7 +41,7 @@ export function Empty({ text = "Belum ada data" }: { text?: string }) {
   return <div className="empty">{text}</div>;
 }
 
-export function HBar({ items, metric, total, maxRows = 10, showPct = true, other = true }: { items: Item[]; metric: Metric; total: number; maxRows?: number; showPct?: boolean; other?: boolean }) {
+export function HBar({ items, metric, total, maxRows = 10, showPct = true, other = true, onPick, active }: { items: Item[]; metric: Metric; total: number; maxRows?: number; showPct?: boolean; other?: boolean; onPick?: (key: string) => void; active?: string }) {
   if (!items.length) return <Empty />;
   const sorted = [...items].sort((a, b) => b.value - a.value);
   let rows: (Item & { other?: boolean })[] = sorted;
@@ -55,7 +55,10 @@ export function HBar({ items, metric, total, maxRows = 10, showPct = true, other
   return (
     <div className="hb">
       {rows.map((r) => (
-        <div className="hb-row" key={r.key} data-tip={`${r.label ?? r.key}|${M.fmt(r.value)}${showPct ? ` · ${fmtPct(total ? (r.value / total) * 100 : 0)}` : ""}`}>
+        <div className={"hb-row" + (onPick && !r.other ? " pick" : "") + (active === r.key ? " on" : "")} key={r.key}
+          onClick={onPick && !r.other ? () => onPick(r.key) : undefined} role={onPick && !r.other ? "button" : undefined} tabIndex={onPick && !r.other ? 0 : undefined}
+          onKeyDown={onPick && !r.other ? (e) => { if (e.key === "Enter") onPick(r.key); } : undefined}
+          data-tip={`${r.label ?? r.key}|${M.fmt(r.value)}${showPct ? ` · ${fmtPct(total ? (r.value / total) * 100 : 0)}` : ""}`}>
           <div className="hb-l" title={r.label ?? r.key}>{r.label ?? r.key}</div>
           <div className="hb-t"><div className={"hb-b" + (r.other ? " other" : "")} style={{ width: `${(r.value / max) * 100}%` }} /></div>
           <div className="hb-v">{M.short(r.value)}</div>

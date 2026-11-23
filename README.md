@@ -38,7 +38,7 @@ Keduanya dilengkapi dashboard laporan, input manual, import Excel, dan penyimpan
 | Halaman | Isi |
 |---|---|
 | **Login** | Masuk dengan email & kata sandi. Hanya pengguna yang dibuat admin yang bisa masuk. |
-| **Dashboard** | Angka ringkas (total proyek, pelaku usaha/NIB, investasi, tenaga kerja, kelengkapan arsip), tren pengajuan per bulan, sebaran per kecamatan, risiko, skala usaha, sektor pembina, jenis perusahaan, 10 KBLI teratas, pelaku usaha teratas, dan rekap per kecamatan. Bisa difilter per tahun, bulan, dan kecamatan, lalu **diunduh sebagai laporan Excel** (9 sheet). |
+| **Dashboard** | **Peta sebaran per kecamatan Kabupaten Belu** (warna sesuai jumlah proyek/investasi/tenaga kerja; wilayah Kota Atambua diperbesar; klik kecamatan untuk memfilter dashboard). Angka ringkas (total proyek, pelaku usaha/NIB, investasi, tenaga kerja, kelengkapan arsip), tren pengajuan per bulan, sebaran per kecamatan, risiko, skala usaha, sektor pembina, jenis perusahaan, 10 KBLI teratas, pelaku usaha teratas, dan rekap per kecamatan. Bisa difilter per tahun, bulan, dan kecamatan, lalu **diunduh sebagai laporan Excel** (9 sheet). |
 | **Data Arsip** | Tabel dengan pencarian, filter, dan pengurutan. Klik baris untuk detail lengkap, edit, hapus, serta **unggah/lihat dokumen PDF**. Export ke Excel dengan format 33 kolom asli. |
 | **Pelaku Usaha** | Daftar pelaku usaha beserta jumlah proyek, investasi, TKI, dan dokumennya. Klik untuk melihat semua proyeknya, mengubah data pelaku, atau menambah proyek baru untuk pelaku tersebut. |
 | **Input Data** | Langkah 1: pilih pelaku usaha (cari NIB/nama), atau tambah pelaku baru. Langkah 2–4: data proyek, lokasi, dan KBLI. KBLI yang pernah dipakai mengisi otomatis judul & sektor. Langkah 5: unggah banyak dokumen. |
@@ -196,6 +196,7 @@ src/pages/               Login, Beranda, halaman OSS (Dashboard, DataArsip, Pela
 src/pages/sicantik/      halaman SiCantik (Dashboard, Data, Pemohon, Input, Import)
 src/components/          Layout, grafik, modal detail, pemilih NIB/KTP (MasterPicker), unggah banyak dokumen (DocUploader)
 src/lib/forms.ts         definisi isian formulir & validasi
+src/assets/belu-kecamatan.json  batas 12 kecamatan Kab. Belu (Kemendagri 2020, disederhanakan) untuk peta dashboard
 src/lib/master.ts        Master KBLI (indeks, hierarki, kategori) & Master Jenis Izin (persyaratan, standar waktu)
 src/pages/master/        halaman Master KBLI & Master Jenis Izin
 vercel.json              agar alamat halaman (mis. /data) tidak 404 saat di-refresh
