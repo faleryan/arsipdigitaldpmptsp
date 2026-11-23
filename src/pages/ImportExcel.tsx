@@ -139,7 +139,7 @@ export default function ImportExcel() {
               </div>
             )}
             <div className="tbl-wrap preview">
-              <table><thead><tr><th>Baris</th><th>Status</th><th>Id Proyek</th><th>Pelaku usaha</th><th>Nama proyek</th><th>KBLI</th><th>Kecamatan</th><th className="num">Investasi</th><th>Tgl pengajuan</th></tr></thead>
+              <table><thead><tr><th>Baris</th><th>Status</th><th>No. Permohonan</th><th>Pelaku usaha</th><th>Nama proyek</th><th>KBLI</th><th>Kecamatan</th><th className="num">Investasi</th><th>Tgl pengajuan</th></tr></thead>
                 <tbody>{built.rows.slice(0, 300).map((x) => {
                   const r = x.rec;
                   return (

@@ -23,7 +23,7 @@ export const PELAKU_FIELDS: FieldDef[] = [
 ];
 export const PROYEK_SECTIONS: { title: string; desc: string; fields: FieldDef[] }[] = [
   { title: "Data proyek", desc: "Identitas proyek sesuai OSS", fields: [
-    F("id_proyek", { req: true, hint: "Contoh: R-202603100806158504562" }),
+    F("id_proyek", { req: true, hint: "Nomor permohonan dari OSS (Id Proyek), mis. R-202603100806158504562" }),
     F("jenis_proyek", { type: "list", opts: JENIS_PROYEK }),
     F("nama_proyek", { req: true }),
     F("tgl_pengajuan", { type: "date" }),
@@ -39,9 +39,9 @@ export const PROYEK_SECTIONS: { title: string; desc: string; fields: FieldDef[] 
     F("luas_tanah", { type: "num" }),
     F("satuan_tanah", { type: "list", opts: ["m2", "Ha"] }),
   ] },
-  { title: "KBLI & investasi", desc: "Ketik kode atau kata kunci — pilih dari Master KBLI, judul terisi otomatis", fields: [
+  { title: "KBLI & investasi", desc: "KBLI dan judulnya saling terhubung: isi kode → judul muncul otomatis, atau cari lewat judul → kode terisi", fields: [
     F("kbli", { hint: "5 digit (tingkat Kelompok)" }),
-    F("judul_kbli", { span: 2 }),
+    F("judul_kbli", { span: 2, hint: "Terisi otomatis dari kode KBLI; bisa juga diketik untuk mencari kode" }),
     F("sektor", { type: "list", dyn: "sektor", span: 2 }),
     F("investasi", { type: "money", hint: "Dalam rupiah" }),
     F("tki", { type: "num", hint: "Jumlah tenaga kerja Indonesia" }),

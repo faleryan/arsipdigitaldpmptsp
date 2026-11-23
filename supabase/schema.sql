@@ -1,11 +1,12 @@
 -- =====================================================================
---  ARSIP DIGITAL OSS & SICANTIK — Skema database Supabase (versi 4)
+--  ARSIP DIGITAL OSS & SICANTIK — Skema database Supabase (versi 5)
 --  Jalankan seluruh isi file ini di Supabase: SQL Editor > New query > Run
 --
 --  • Instalasi baru  : langsung jalankan.
 --  • Sudah pakai versi sebelumnya: jalankan juga. Data lama dipindahkan
 --    otomatis ke tabel Pelaku Usaha & Pemohon (tidak ada data yang hilang).
 --  Versi 4 menambah Master KBLI & Master Jenis Izin.
+--  Versi 5 menambah dokumen tingkat pelaku usaha (NIB, akta, NPWP, …).
 --  Aman dijalankan berulang kali.
 -- =====================================================================
 
@@ -165,6 +166,21 @@ create table if not exists public.oss_dokumen (
   created_at   timestamptz not null default now()
 );
 create index if not exists oss_dokumen_proyek_idx on public.oss_dokumen (id_proyek);
+
+-- ---------- 4b. Dokumen pelaku usaha (NIB, akta, NPWP, KTP penanggung jawab) ----------
+--  Disimpan sekali per NIB dan berlaku untuk semua proyek pelaku tersebut.
+create table if not exists public.pelaku_dokumen (
+  id           uuid primary key default gen_random_uuid(),
+  nib          text not null references public.pelaku_usaha(nib) on delete cascade on update cascade,
+  label        text not null default '',
+  nama_file    text not null,
+  path         text not null,
+  ukuran       bigint,
+  tipe         text,
+  uploaded_by  uuid references auth.users(id) on delete set null default auth.uid(),
+  created_at   timestamptz not null default now()
+);
+create index if not exists pelaku_dokumen_nib_idx on public.pelaku_dokumen (nib);
 
 -- =====================================================================
 --  SICANTIK
@@ -334,6 +350,7 @@ alter table public.profiles         enable row level security;
 alter table public.pelaku_usaha     enable row level security;
 alter table public.oss_proyek       enable row level security;
 alter table public.oss_dokumen      enable row level security;
+alter table public.pelaku_dokumen   enable row level security;
 alter table public.sicantik_pemohon enable row level security;
 alter table public.sicantik_izin    enable row level security;
 alter table public.sicantik_dokumen enable row level security;
@@ -352,7 +369,7 @@ create policy "profil: admin hapus" on public.profiles
 do $$
 declare t text;
 begin
-  foreach t in array array['pelaku_usaha','oss_proyek','oss_dokumen','sicantik_pemohon','sicantik_izin','sicantik_dokumen'] loop
+  foreach t in array array['pelaku_usaha','pelaku_dokumen','oss_proyek','oss_dokumen','sicantik_pemohon','sicantik_izin','sicantik_dokumen'] loop
     execute format('drop policy if exists "data: baca" on public.%I', t);
     execute format('create policy "data: baca" on public.%I for select to authenticated using (public.app_role() in (''admin'',''operator'',''viewer''))', t);
     execute format('drop policy if exists "data: tulis" on public.%I', t);
@@ -411,7 +428,7 @@ create policy "arsip: hapus" on storage.objects
 do $$
 declare t text;
 begin
-  foreach t in array array['pelaku_usaha','oss_proyek','oss_dokumen','sicantik_pemohon','sicantik_izin','sicantik_dokumen','master_kbli','master_jenis_izin'] loop
+  foreach t in array array['pelaku_usaha','pelaku_dokumen','oss_proyek','oss_dokumen','sicantik_pemohon','sicantik_izin','sicantik_dokumen','master_kbli','master_jenis_izin'] loop
     begin
       execute format('alter publication supabase_realtime add table public.%I', t);
     exception when duplicate_object then null;

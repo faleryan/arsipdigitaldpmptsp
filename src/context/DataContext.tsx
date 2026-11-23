@@ -71,7 +71,7 @@ function createJoined<T, M>(a: { use: () => Store<T> }, m: { use: () => Store<M>
   return { Provider, use: () => useContext(Ctx) };
 }
 
-const pelaku = createStore<Pelaku>("pelaku-changes", ["pelaku_usaha"], api.fetchPelaku, (r) => r.nib);
+const pelaku = createStore<Pelaku>("pelaku-changes", ["pelaku_usaha", "pelaku_dokumen"], api.fetchPelaku, (r) => r.nib);
 const proyek = createStore<Proyek>("oss-changes", ["oss_proyek", "oss_dokumen"], api.fetchProyek, (r) => r.id_proyek);
 const pemohon = createStore<Pemohon>("pemohon-changes", ["sicantik_pemohon"], api.fetchPemohon, (r) => r.id_pemohon);
 const izin = createStore<Izin>("sicantik-changes", ["sicantik_izin", "sicantik_dokumen"], api.fetchIzin, (r) => r.id_sicantik);

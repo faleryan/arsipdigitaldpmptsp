@@ -19,7 +19,7 @@ export interface ImportRow { line: number; rec: Proyek; problem: string; dateWar
 
 export interface SheetSpec { headerMap: Record<string, string>; keyField: string; keyLabel: string; allKeys: string[]; title: string }
 export const OSS_SPEC: SheetSpec = {
-  headerMap: HEADER_MAP, keyField: "id_proyek", keyLabel: "Id Proyek", title: "Format Arsip OSS",
+  headerMap: HEADER_MAP, keyField: "id_proyek", keyLabel: "Nomor Permohonan (Id Proyek)", title: "Format Arsip OSS",
   allKeys: COLS.map((c) => c[0]).filter((k) => k !== "no"),
 };
 export const SIC_SPEC: SheetSpec = {
@@ -71,7 +71,7 @@ export function buildRows(P: ParsedSheet, cleanPlaceholders: boolean) {
     if (Object.entries(PLACEHOLDERS).some(([k, p]) => norm(raw[k]) === p)) placeholderCount++;
     const rec = normalizeRecord(raw, { cleanPlaceholders });
     let problem = "";
-    if (!rec.id_proyek) problem = "Id Proyek kosong";
+    if (!rec.id_proyek) problem = "Nomor Permohonan kosong";
     else if (!rec.nib) problem = "NIB kosong";
     else if (!rec.nama_perusahaan) problem = "Nama pelaku usaha kosong";
     else if (ids.has(rec.id_proyek)) problem = `Duplikat baris ${ids.get(rec.id_proyek)}`;

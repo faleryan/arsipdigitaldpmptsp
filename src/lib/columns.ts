@@ -4,6 +4,7 @@ export interface Dokumen {
   id: string;
   id_proyek?: string;
   id_sicantik?: string;
+  nib?: string;
   label: string;
   nama_file: string;
   path: string;
@@ -50,9 +51,11 @@ export interface Proyek {
   created_at?: string;
   updated_at?: string;
   oss_dokumen?: Dokumen[];
+  /** dokumen pelaku usaha (ikut tergabung dari data pelaku) */
+  pelaku_dokumen?: Dokumen[];
 }
 
-export type FieldKey = Exclude<keyof Proyek, "sumber" | "file_import" | "created_at" | "updated_at" | "oss_dokumen">;
+export type FieldKey = Exclude<keyof Proyek, "sumber" | "file_import" | "created_at" | "updated_at" | "oss_dokumen" | "pelaku_dokumen">;
 
 /** Data induk pelaku usaha (satu NIB → banyak proyek) */
 export interface Pelaku {
@@ -71,6 +74,8 @@ export interface Pelaku {
   kab_perusahaan: string;
   created_at?: string;
   updated_at?: string;
+  /** dokumen tingkat pelaku usaha (NIB, akta, NPWP, …) */
+  pelaku_dokumen?: Dokumen[];
 }
 export const PELAKU_KEYS = [
   "nib", "nama_perusahaan", "jenis_perusahaan", "status_pm", "tgl_terbit_oss", "nik", "nohp", "email", "username",
@@ -79,7 +84,7 @@ export const PELAKU_KEYS = [
 
 export const COLS: [FieldKey | "no", string][] = [
   ["no", "No."],
-  ["id_proyek", "Id Proyek"],
+  ["id_proyek", "Nomor Permohonan"],
   ["jenis_proyek", "Uraian_Jenis_Proyek"],
   ["nib", "Nib"],
   ["nik", "nik"],
@@ -129,7 +134,7 @@ export function pick<T extends object>(o: T, keys: readonly string[]): Record<st
 export const toPelaku = (r: Proyek | Pelaku): Pelaku => pick(r, PELAKU_KEYS) as unknown as Pelaku;
 
 export const PRETTY: Record<FieldKey, string> = {
-  id_proyek: "Id Proyek", jenis_proyek: "Uraian Jenis Proyek", nib: "NIB", nik: "NIK", nohp: "No. HP", email: "Email",
+  id_proyek: "Nomor Permohonan", jenis_proyek: "Uraian Jenis Proyek", nib: "NIB", nik: "NIK", nohp: "No. HP", email: "Email",
   username: "Username", nama_perusahaan: "Nama Perusahaan / Pelaku Usaha", alamat_perusahaan: "Alamat Perusahaan",
   kel_perusahaan: "Kelurahan Perusahaan", kec_perusahaan: "Kecamatan Perusahaan", kab_perusahaan: "Kab/Kota Perusahaan",
   tgl_terbit_oss: "Tanggal Terbit OSS", status_pm: "Status Penanaman Modal", jenis_perusahaan: "Jenis Perusahaan",
@@ -144,7 +149,7 @@ export const norm = (s: unknown) => String(s ?? "").toLowerCase().replace(/[^a-z
 
 export const HEADER_MAP: Record<string, FieldKey | "no"> = {
   ...Object.fromEntries(COLS.map(([k, l]) => [norm(l), k])),
-  no: "no", nomor: "no", idproyek: "id_proyek", jenisproyek: "jenis_proyek", uraianjenisproyek: "jenis_proyek",
+  no: "no", nomor: "no", idproyek: "id_proyek", nomorpermohonan: "id_proyek", nopermohonan: "id_proyek", nomorpermohonanproyek: "id_proyek", jenisproyek: "jenis_proyek", uraianjenisproyek: "jenis_proyek",
   namaperusahaan: "nama_perusahaan", namapelakuusaha: "nama_perusahaan", alamatperusahaan: "alamat_perusahaan",
   kelurahanperusahaan: "kel_perusahaan", kecamatanperusahaan: "kec_perusahaan", kabkotaperusahaan: "kab_perusahaan",
   tanggalterbitoss: "tgl_terbit_oss", statuspenanamanmodal: "status_pm", jenisperusahaan: "jenis_perusahaan",

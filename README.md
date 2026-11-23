@@ -15,6 +15,9 @@ Keduanya dilengkapi dashboard laporan, input manual, import Excel, dan penyimpan
 
 ### Data induk & arsip dokumen
 
+- **Dokumen pelaku usaha (NIB):** NIB, akta pendirian, NPWP, dan KTP penanggung jawab diunggah sekali pada pelaku usaha (di langkah 1 Input Data atau di detail Pelaku Usaha), lalu otomatis tampil di semua proyek NIB tersebut. Dokumen proyek (sertifikat standar, izin usaha, PKKPR, …) tetap per proyek.
+- **Data Arsip OSS per NIB:** tabel Data Arsip OSS menampilkan pelaku usaha (NIB) sebagai induk. Klik untuk membuka daftar proyeknya, atau pilih tampilan **Per proyek** untuk tabel biasa.
+- **KBLI ↔ Judul KBLI:** saat kode KBLI diketik, judulnya langsung terisi (dari Master KBLI, atau dari arsip untuk kode KBLI lama). Sebaliknya, mengetik judul menampilkan saran untuk memilih kodenya.
 - **Pelaku Usaha (OSS):** satu NIB bisa punya banyak proyek/KBLI. Data pelaku (nama, NIK, alamat, dan seterusnya) disimpan sekali saja. Saat input proyek, cukup **pilih NIB atau nama pelaku usaha**. Bila data pelaku diubah, perubahannya berlaku untuk semua proyeknya.
 - **Pemohon (SiCantik):** satu pemohon bisa mengajukan banyak izin. Saat input permohonan, cukup **pilih No. KTP atau nama pemohon**.
 - **Arsip dokumen:** setiap proyek/permohonan bisa dilampiri **banyak dokumen** sekaligus (seret beberapa file). Setiap file diberi jenis dokumennya, mis. NIB, PKKPR, STR, atau KTP. Jenis dokumen ditebak otomatis dari nama file dan bisa diubah.
@@ -146,7 +149,7 @@ npx vercel --prod
 
 **OSS**
 
-- **Id Proyek** menjadi kunci unik. Import ulang file yang sama tidak membuat data ganda.
+- **Nomor Permohonan** (kolom *Id Proyek* di unduhan OSS) menjadi kunci unik. File dengan judul kolom “Id Proyek” maupun “Nomor Permohonan” sama-sama dikenali. Import ulang file yang sama tidak membuat data ganda.
 - **Tanggal** dikenali dari format `01/07/2020`, `24 April 2026`, maupun tanggal Excel. Tanggal yang tidak terbaca disimpan kosong dan diberi tanda di pratinjau.
 - **Angka** mengikuti format Indonesia: `14.177` dibaca 14177, `885,58` dibaca 885,58.
 - Teks placeholder dari unduhan OSS ("Alamat Perusahaan", "kelurahan", "kecamatan", "kab_kota") bisa otomatis dikosongkan saat import.
@@ -177,9 +180,9 @@ Sudah memakai versi sebelumnya? Cukup **jalankan ulang seluruh isi `supabase/sch
 2. memindahkan data pelaku usaha dan pemohon dari baris proyek/izin yang sudah ada ke tabel tersebut (satu per NIB atau pemohon),
 3. menghubungkan proyek ke pelaku usaha dan izin ke pemohon.
 
-Versi 4 juga membuat tabel `master_kbli` dan `master_jenis_izin`, lalu mengisi master jenis izin dari data permohonan yang sudah ada.
+Versi 5 menambah tabel `pelaku_dokumen` (dokumen tingkat NIB). Versi 4 juga membuat tabel `master_kbli` dan `master_jenis_izin`, lalu mengisi master jenis izin dari data permohonan yang sudah ada.
 
-Tidak ada data atau dokumen yang hilang, dan skrip aman dijalankan berulang. Proyek lama yang NIB-nya kosong diberi NIB sementara `TANPA-NIB-<Id Proyek>`, yang bisa Anda perbaiki di menu **Pelaku Usaha**.
+Tidak ada data atau dokumen yang hilang, dan skrip aman dijalankan berulang. Proyek lama yang NIB-nya kosong diberi NIB sementara `TANPA-NIB-<Nomor Permohonan>`, yang bisa Anda perbaiki di menu **Pelaku Usaha**.
 
 > Sebaiknya *backup* dulu sebelum menjalankan: **Database → Backups**, atau ekspor data dari menu Data Arsip.
 

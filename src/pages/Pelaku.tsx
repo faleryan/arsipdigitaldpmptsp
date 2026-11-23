@@ -42,7 +42,8 @@ export default function PelakuPage() {
     { key: "n", label: "Proyek", num: true, sort: (r) => r.n, render: (r) => <b>{fmtInt(r.n)}</b> },
     { key: "inv", label: "Investasi", num: true, sort: (r) => r.inv, render: (r) => fmtRpShort(r.inv) },
     { key: "tki", label: "TKI", num: true, sort: (r) => r.tki, render: (r) => fmtInt(r.tki) },
-    { key: "docs", label: "Dokumen", num: true, sort: (r) => r.docs, render: (r) => fmtInt(r.docs) },
+    { key: "dp", label: "Dok. pelaku", sort: (r) => r.pelaku_dokumen?.length || 0, render: (r) => (r.pelaku_dokumen?.length ? <span className="badge nib">{r.pelaku_dokumen.length} dok.</span> : <span className="badge warn">NIB belum</span>) },
+    { key: "docs", label: "Dok. proyek", num: true, sort: (r) => r.docs, render: (r) => fmtInt(r.docs) },
   ];
 
   if (!pel.loaded || !oss.loaded) return <Loading />;

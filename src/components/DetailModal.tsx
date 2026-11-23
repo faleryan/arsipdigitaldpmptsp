@@ -78,7 +78,9 @@ export function DetailModal({ id, onClose }: { id: string; onClose: () => void }
             </dl>
           </section>
         ))}
-        <DocsPanel kind="oss" id={r.id_proyek} docs={docs} note={r.arsip_dokumen} canWrite={canWrite} onChanged={refresh} />
+        <DocsPanel kind="pelaku" id={r.nib} docs={r.pelaku_dokumen || []} canWrite={canWrite} onChanged={refresh}
+          title="Dokumen pelaku usaha (NIB)" hint={`Melekat pada NIB ${r.nib} — berlaku untuk ${nSama} proyek pelaku ini.`} />
+        <DocsPanel kind="oss" id={r.id_proyek} docs={docs} note={r.arsip_dokumen} canWrite={canWrite} onChanged={refresh} title="Dokumen proyek" />
         <p className="cell-sub meta">Sumber: {r.sumber === "import" ? `Import Excel${r.file_import ? ` (${r.file_import})` : ""}` : "Input manual"}{r.updated_at ? ` · Diperbarui ${new Date(r.updated_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}` : ""}</p>
       </div>
       <div className="modal-f">

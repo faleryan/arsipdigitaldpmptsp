@@ -23,7 +23,7 @@ const sb = () => {
 export function errMsg(e: unknown): string {
   const err = e as { message?: string; code?: string; status?: number } | null;
   const m = err?.message || String(e);
-  if (err?.code === "23505") return "Data dengan kunci (Id Proyek / NIB / ID) tersebut sudah ada.";
+  if (err?.code === "23505") return "Data dengan kunci (Nomor Permohonan / NIB / ID) tersebut sudah ada.";
   if (err?.code === "23503") return "Data masih terhubung dengan data lain (mis. pelaku usaha masih punya proyek, atau jenis izin masih dipakai permohonan), atau data induknya belum ada.";
   if (err?.code === "42501" || /row-level security|permission denied/i.test(m)) return "Anda tidak memiliki izin untuk tindakan ini. Hubungi admin.";
   if (/Invalid login credentials/i.test(m)) return "Email atau kata sandi salah.";
@@ -99,7 +99,7 @@ async function upsertChunks(table: string, rows: Record<string, unknown>[], onCo
 }
 
 /* ---------------- Pelaku usaha (OSS) ---------------- */
-export const fetchPelaku = () => fetchPaged<Pelaku>("pelaku_usaha", "*", "nib");
+export const fetchPelaku = () => fetchPaged<Pelaku>("pelaku_usaha", "*, pelaku_dokumen(*)", "nib");
 export async function insertPelaku(p: Pelaku) {
   const { error } = await sb().from("pelaku_usaha").insert(pick(p, PELAKU_KEYS));
   if (error) throw error;
@@ -109,7 +109,8 @@ export async function updatePelaku(nib: string, p: Partial<Pelaku>) {
   const { error } = await sb().from("pelaku_usaha").update(pick(p, PELAKU_KEYS)).eq("nib", nib);
   if (error) throw error;
 }
-export async function deletePelaku(nib: string) {
+export async function deletePelaku(nib: string, docs: Dokumen[] = []) {
+  if (docs.length) await sb().storage.from(BUCKET).remove(docs.map((d) => d.path));
   const { error } = await sb().from("pelaku_usaha").delete().eq("nib", nib);
   if (error) throw error;
 }
@@ -132,7 +133,7 @@ export async function deleteProyek(id: string, docs: Dokumen[] = []) {
 }
 /** Hapus semua proyek + pelaku usaha + file dokumennya */
 export async function deleteAllOss(rows: Proyek[], pelaku: Pelaku[], onProgress?: (done: number, total: number) => void) {
-  const paths = rows.flatMap((r) => (r.oss_dokumen || []).map((d) => d.path));
+  const paths = [...rows.flatMap((r) => (r.oss_dokumen || []).map((d) => d.path)), ...pelaku.flatMap((p) => (p.pelaku_dokumen || []).map((d) => d.path))];
   for (let i = 0; i < paths.length; i += 500) await sb().storage.from(BUCKET).remove(paths.slice(i, i + 500));
   const total = rows.length + pelaku.length;
   const ids = rows.map((r) => r.id_proyek);
@@ -288,9 +289,10 @@ export async function deleteJenisIzin(nama: string) {
 }
 
 /* ---------------- Dokumen (OSS & SiCantik) ---------------- */
-export type DocKind = "oss" | "sicantik";
+export type DocKind = "oss" | "sicantik" | "pelaku";
 const DOC_TABLE: Record<DocKind, { table: string; fk: string }> = {
   oss: { table: "oss_dokumen", fk: "id_proyek" },
+  pelaku: { table: "pelaku_dokumen", fk: "nib" },
   sicantik: { table: "sicantik_dokumen", fk: "id_sicantik" },
 };
 export async function uploadDokumen(kind: DocKind, id: string, file: File, label: string): Promise<Dokumen> {

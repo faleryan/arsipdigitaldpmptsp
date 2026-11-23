@@ -90,7 +90,8 @@ export function fmtDateSlash(iso: string | null | undefined) {
 export const kecLabel = (v: string | null | undefined) => (!v ? "" : KEC_CANON[norm(v)] || String(v).trim());
 export const yearOf = (r: Proyek) => (isISO(r.tgl_pengajuan) ? r.tgl_pengajuan.slice(0, 4) : "");
 export const maskNik = (n: string) => (n.length > 8 ? n.slice(0, 4) + "•".repeat(n.length - 8) + n.slice(-4) : n);
-export const hasArsip = (r: Proyek) => (r.oss_dokumen?.length ?? 0) > 0 || !!r.arsip_dokumen;
+/** Proyek dianggap berdokumen bila ada dokumen proyek, dokumen pelaku usahanya (mis. NIB), atau tautan arsip */
+export const hasArsip = (r: Proyek) => (r.oss_dokumen?.length ?? 0) > 0 || (r.pelaku_dokumen?.length ?? 0) > 0 || !!r.arsip_dokumen;
 export const fmtSize = (b: number | null | undefined) =>
   b == null ? "" : b > 1048576 ? (b / 1048576).toLocaleString("id-ID", { maximumFractionDigits: 1 }) + " MB" : Math.ceil(b / 1024) + " KB";
 

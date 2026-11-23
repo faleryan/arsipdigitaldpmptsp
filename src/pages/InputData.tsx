@@ -11,11 +11,10 @@ import { Loading } from "../components/Loading";
 import { StatusBanner } from "../components/StatusBanner";
 import { FieldGrid, type FieldDef } from "../components/FormFields";
 import { MasterPicker } from "../components/MasterPicker";
-import { DocUploader, LABELS_OSS, type PendingDoc } from "../components/DocUploader";
+import { DocUploader, LABELS_OSS, LABELS_PELAKU, type PendingDoc } from "../components/DocUploader";
 import { uploadAll } from "../components/DocsPanel";
 import { PelakuModal } from "../components/PelakuModal";
-import { KbliInput } from "../components/KbliInput";
-import { titleCase } from "../lib/master";
+import { KbliInput, kbliOptions, type KbliOption } from "../components/KbliInput";
 
 const PROYEK_FIELDS = PROYEK_SECTIONS.flatMap((s) => s.fields);
 
@@ -50,6 +49,7 @@ function Form({ editing, initialNib }: { editing?: Proyek; initialNib: string | 
   const [v, setV] = useState<Record<string, string>>(() => ({ ...toFormValues(editing, PROYEK_FIELDS, PROYEK_DEFAULTS), arsip_dokumen: editing?.arsip_dokumen || "" }));
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<PendingDoc[]>([]);
+  const [pendingPelaku, setPendingPelaku] = useState<PendingDoc[]>([]);
   const [busy, setBusy] = useState("");
 
   const countByNib = useMemo(() => { const m = new Map<string, number>(); rows.forEach((r) => m.set(r.nib, (m.get(r.nib) || 0) + 1)); return m; }, [rows]);
@@ -63,16 +63,19 @@ function Form({ editing, initialNib }: { editing?: Proyek; initialNib: string | 
     rows.forEach((r) => { if (r.kbli && r.judul_kbli && !m[r.kbli]) m[r.kbli] = { judul: r.judul_kbli, sektor: r.sektor }; });
     return m;
   }, [rows]);
+  const kOptions = useMemo(() => kbliOptions(kbli.rows, kbli.index, kbliMap), [kbli.rows, kbli.index, kbliMap]);
+  const kByKode = useMemo(() => new Map(kOptions.map((o) => [o.kode, o])), [kOptions]);
+  /** KBLI diketik → judul (dan sektor dari arsip) ikut terisi otomatis */
+  const setKbli = (code: string) => {
+    const o = kByKode.get(code.trim());
+    setV((p) => (o ? { ...p, kbli: code, judul_kbli: o.judul, sektor: p.sektor || kbliMap[o.kode]?.sektor || "" } : { ...p, kbli: code }));
+  };
+  const pickKbli = (o: KbliOption) => setV((p) => ({ ...p, kbli: o.kode, judul_kbli: o.judul, sektor: p.sektor || kbliMap[o.kode]?.sektor || "" }));
   const sel = nib ? pel.byId.get(nib) : undefined;
   const others = nib ? rows.filter((r) => r.nib === nib && r.id_proyek !== editing?.id_proyek) : [];
 
   const set = (k: string, val: string) => setV((p) => ({ ...p, [k]: val }));
   const onBlur = (f: FieldDef) => {
-    if (f.k === "kbli") {
-      const m = kbliMap[v.kbli.trim()];
-      const mk = kbli.index.get(v.kbli.trim());
-      setV((p) => ({ ...p, judul_kbli: p.judul_kbli || (mk ? titleCase(mk.judul) : m?.judul || ""), sektor: p.sektor || m?.sektor || "" }));
-    }
     if (f.type === "money") { const n = parseNum(v[f.k]); if (n != null) set(f.k, fmtInt(n)); }
   };
   const onPelakuBlur = (f: FieldDef) => {
@@ -90,7 +93,7 @@ function Form({ editing, initialNib }: { editing?: Proyek; initialNib: string | 
   const submit = async (ev: React.FormEvent) => {
     ev.preventDefault();
     const e = validateProyek(v);
-    if (!editing && !e.id_proyek && byId.has(v.id_proyek.trim())) e.id_proyek = "Id Proyek sudah ada di arsip";
+    if (!editing && !e.id_proyek && byId.has(v.id_proyek.trim())) e.id_proyek = "Nomor Permohonan sudah ada di arsip";
     let pe: Record<string, string> = {};
     if (newMode) {
       pe = validatePelaku(pv);
@@ -115,12 +118,17 @@ function Form({ editing, initialNib }: { editing?: Proyek; initialNib: string | 
       const rec = { ...normalizeRecord(v), nib: theNib };
       if (editing) await api.updateProyek(editing.id_proyek, rec);
       else await api.insertProyek(rec);
+      if (pendingPelaku.length) {
+        await uploadAll("pelaku", theNib, pendingPelaku, (i) => setBusy(`Mengunggah dokumen pelaku ${i + 1}/${pendingPelaku.length}…`));
+        setPendingPelaku([]);
+      }
       if (pending.length) {
         setBusy("Mengunggah dokumen…");
-        await uploadAll("oss", rec.id_proyek, pending, (i) => setBusy(`Mengunggah dokumen ${i + 1}/${pending.length}…`));
+        await uploadAll("oss", rec.id_proyek, pending, (i) => setBusy(`Mengunggah dokumen proyek ${i + 1}/${pending.length}…`));
       }
       await Promise.all([refresh(), pel.refresh()]);
       toast(editing ? "Perubahan disimpan" : `Proyek tersimpan${pending.length ? ` dengan ${pending.length} dokumen` : ""}`);
+      setPendingPelaku([]);
       if (editing) nav(`/oss/data?id=${encodeURIComponent(rec.id_proyek)}`);
       else { setNewMode(false); setNib(theNib); reset(); }
     } catch (x) { toast(api.errMsg(x), 6000); }
@@ -157,6 +165,18 @@ function Form({ editing, initialNib }: { editing?: Proyek; initialNib: string | 
               <FieldGrid fields={PELAKU_FIELDS} v={pv} errs={perrs} set={(k, val) => setPv((o) => ({ ...o, [k]: val }))} onBlur={onPelakuBlur} idPrefix="np_" />
             </>
           )}
+          {(sel || newMode) && (
+            <div className="pelaku-docs">
+              <div className="pd-head">
+                <b>Dokumen pelaku usaha</b>
+                <span className="cell-sub">NIB, akta, NPWP, KTP penanggung jawab — disimpan pada NIB, berlaku untuk semua proyeknya</span>
+              </div>
+              {sel?.pelaku_dokumen?.length ? (
+                <div className="docs saved">{sel.pelaku_dokumen.map((d) => <div className="doc-item" key={d.id}><FileText size={16} className="doc-ico" /><span className="nm">{d.label && <span className="doc-tag">{d.label}</span>}{d.nama_file}</span><span className="cell-sub">tersimpan</span></div>)}</div>
+              ) : sel ? <div className="kbli-warn" style={{ marginBottom: 8 }}>Dokumen NIB pelaku ini belum diarsipkan.</div> : null}
+              <DocUploader pending={pendingPelaku} onChange={setPendingPelaku} labels={LABELS_PELAKU} onReject={(m) => toast(m, 6000)} compact />
+            </div>
+          )}
         </div>
 
         {PROYEK_SECTIONS.map((sec, i) => (
@@ -165,16 +185,17 @@ function Form({ editing, initialNib }: { editing?: Proyek; initialNib: string | 
             <FieldGrid fields={sec.fields.map((f) => (f.k === "id_proyek" && editing ? { ...f, readOnly: true } : f))} v={v} errs={errs} set={set} onBlur={onBlur} lists={lists}
               custom={{
                 kbli: (id) => (
-                  <KbliInput id={id} value={v.kbli} index={kbli.index} rows={kbli.rows} err={!!errs.kbli}
-                    onChange={(x) => set("kbli", x)}
-                    onPick={(k) => setV((p) => ({ ...p, kbli: k.kode, judul_kbli: titleCase(k.judul), sektor: p.sektor || kbliMap[k.kode]?.sektor || "" }))} />
+                  <KbliInput id={id} value={v.kbli} index={kbli.index} options={kOptions} err={!!errs.kbli} onChange={setKbli} onPick={pickKbli} />
+                ),
+                judul_kbli: (id) => (
+                  <KbliInput id={id} mode="judul" value={v.judul_kbli} index={kbli.index} options={kOptions} onChange={(x) => set("judul_kbli", x)} onPick={pickKbli} />
                 ),
               }} />
           </div>
         ))}
 
         <div className="card form-sec">
-          <div className="card-h col"><h3><span className="step-no">{PROYEK_SECTIONS.length + 2}</span>Arsip dokumen</h3><span>Lampirkan sebanyak yang diperlukan; beri jenis dokumen pada setiap file</span></div>
+          <div className="card-h col"><h3><span className="step-no">{PROYEK_SECTIONS.length + 2}</span>Dokumen proyek</h3><span>Dokumen khusus proyek ini (sertifikat standar, izin usaha, PKKPR, …); beri jenis pada setiap file</span></div>
           <div className="fgrid">
             <div className="f span3">
               <label htmlFor="fi_arsip_dokumen">Tautan / keterangan arsip</label>

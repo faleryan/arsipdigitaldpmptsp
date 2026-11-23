@@ -531,3 +531,26 @@ textarea.inp { resize: vertical; min-height: 80px; font-family: inherit; }
 .hb-row.on { background: color-mix(in srgb, #eda100 16%, var(--surface)); }
 .hb-row.on .hb-l { color: var(--ink); font-weight: 700; }
 @media (max-width: 1100px) { .map-grid { grid-template-columns: 1fr; } }
+
+/* ---------- Data arsip per NIB ---------- */
+.view-bar { display: flex; gap: 10px; align-items: center; margin: -4px 0 12px; flex-wrap: wrap; }
+.view-bar .seg button { display: inline-flex; align-items: center; gap: 6px; }
+.grp-row .chev { color: var(--muted); transition: transform .15s; transform: rotate(-90deg); }
+.grp-row.open .chev { transform: none; color: var(--accent); }
+.grp-row.open td { background: var(--accent-soft); border-bottom-color: transparent; }
+.sub-row > td { padding: 0 0 12px; background: var(--accent-soft); }
+.sub-tbl { width: 100%; background: var(--surface); border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+.sub-tbl td { padding: 8px 12px; font-size: 13px; }
+.sub-tbl tr:last-child td { border-bottom: none; }
+.badge.nib { background: color-mix(in srgb, var(--good) 15%, var(--surface)); color: var(--good-ink); }
+.mob-grp { border-bottom: 1px solid var(--grid); }
+.mob-grp .mob-item { border-bottom: none; width: 100%; box-sizing: border-box; }
+.mob-grp .chev { margin-left: auto; transition: transform .15s; }
+.mob-grp .chev.up { transform: rotate(180deg); }
+.mob-sub { display: flex; flex-direction: column; gap: 6px; padding: 0 12px 12px 22px; }
+.mob-subitem { all: unset; display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border-radius: 10px; background: var(--surface-2); cursor: pointer; }
+.data-tbl.grp td:nth-child(2) { min-width: 220px; }
+.pelaku-docs { margin: 0 18px 18px; padding: 12px 14px; border: 1px dashed var(--border-2); border-radius: 12px; display: flex; flex-direction: column; gap: 8px; }
+.pd-head { display: flex; flex-direction: column; gap: 2px; }
+.sub-tbl td { min-width: 0 !important; }
+.sub-tbl td:first-child { width: 1%; }

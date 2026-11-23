@@ -4,7 +4,7 @@ import { useUI } from "../context/UIContext";
 import type { Dokumen } from "../lib/columns";
 import { fmtSize } from "../lib/format";
 import * as api from "../lib/api";
-import { DocUploader, LABELS_OSS, LABELS_SICANTIK, type PendingDoc } from "./DocUploader";
+import { DocUploader, LABELS_OSS, LABELS_PELAKU, LABELS_SICANTIK, type PendingDoc } from "./DocUploader";
 
 /** Unggah beberapa dokumen berurutan. Mengembalikan jumlah yang berhasil. */
 export async function uploadAll(kind: api.DocKind, id: string, pending: PendingDoc[], onStep?: (i: number) => void) {
@@ -18,8 +18,9 @@ export async function uploadAll(kind: api.DocKind, id: string, pending: PendingD
 }
 
 /** Daftar dokumen arsip + unggah banyak dokumen, dipakai OSS & SiCantik */
-export function DocsPanel({ kind, id, docs, note, canWrite, onChanged, extraLabels = [] }: {
+export function DocsPanel({ kind, id, docs, note, canWrite, onChanged, extraLabels = [], title = "Arsip dokumen", hint }: {
   kind: api.DocKind; id: string; docs: Dokumen[]; note?: string; canWrite: boolean; onChanged: () => Promise<void>; extraLabels?: string[];
+  title?: string; hint?: string;
 }) {
   const { toast, confirm } = useUI();
   const [pending, setPending] = useState<PendingDoc[]>([]);
@@ -45,7 +46,8 @@ export function DocsPanel({ kind, id, docs, note, canWrite, onChanged, extraLabe
 
   return (
     <>
-      <div className="dsec">Arsip dokumen {docs.length > 0 && <span className="count">{docs.length}</span>}</div>
+      <div className="dsec">{title} {docs.length > 0 && <span className="count">{docs.length}</span>}</div>
+      {hint && <p className="cell-sub" style={{ margin: "-4px 0 8px" }}>{hint}</p>}
       {note && (
         <p className="arsip-note">{/^https?:\/\//i.test(note) ? <a href={note} target="_blank" rel="noopener noreferrer">{note} <ExternalLink size={13} /></a> : note}</p>
       )}
@@ -58,11 +60,11 @@ export function DocsPanel({ kind, id, docs, note, canWrite, onChanged, extraLabe
             <button className="btn sm" onClick={() => open(d)}>Buka</button>
             {canWrite && <button className="icon-btn danger" onClick={() => remove(d)} aria-label={`Hapus ${d.nama_file}`}><Trash2 size={16} /></button>}
           </div>
-        )) : !note && <div className="cell-sub">Belum ada dokumen terlampir.</div>}
+        )) : !note && <div className="cell-sub">Belum ada dokumen.</div>}
       </div>
       {canWrite && (
         <div className="docs-add">
-          <DocUploader pending={pending} onChange={setPending} labels={[...extraLabels, ...(kind === "oss" ? LABELS_OSS : LABELS_SICANTIK).filter((l) => !extraLabels.includes(l))]} onReject={(m) => toast(m, 6000)} compact />
+          <DocUploader pending={pending} onChange={setPending} labels={[...extraLabels, ...(kind === "oss" ? LABELS_OSS : kind === "pelaku" ? LABELS_PELAKU : LABELS_SICANTIK).filter((l) => !extraLabels.includes(l))]} onReject={(m) => toast(m, 6000)} compact />
           {pending.length > 0 && (
             <div className="row-gap end">
               <button className="btn ghost sm" disabled={busy !== null} onClick={() => setPending([])}>Batal</button>

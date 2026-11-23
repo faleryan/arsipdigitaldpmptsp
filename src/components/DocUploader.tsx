@@ -7,7 +7,8 @@ export const MAX_BYTES = 20 * 1024 * 1024;
 const ACCEPT = "application/pdf,image/jpeg,image/png,image/webp";
 const OK_TYPE = /^(application\/pdf|image\/(jpeg|png|webp))$/;
 
-export const LABELS_OSS = ["NIB", "Sertifikat Standar", "Izin Usaha", "PKKPR", "PBG / IMB", "Persetujuan Lingkungan", "Akta Pendirian", "KTP Penanggung Jawab", "NPWP", "Surat Pernyataan", "Lainnya"];
+export const LABELS_PELAKU = ["NIB", "Akta Pendirian", "SK Kemenkumham", "NPWP", "KTP Penanggung Jawab", "Surat Kuasa", "Lainnya"];
+export const LABELS_OSS = ["Sertifikat Standar", "Izin Usaha", "PKKPR", "PBG / IMB", "Persetujuan Lingkungan", "Foto Lokasi", "Surat Pernyataan", "Lainnya"];
 export const LABELS_SICANTIK = ["Surat Izin", "STR", "KTP", "Ijazah", "Surat Rekomendasi", "Surat Keterangan Sehat", "Pas Foto", "Surat Pernyataan", "Dokumen Teknis", "Lainnya"];
 
 /** Pilih beberapa file sekaligus; setiap file diberi jenis dokumennya sendiri */
@@ -67,7 +68,7 @@ function guessLabel(name: string, labels: string[]): string {
     [/\bnib\b/, "NIB"], [/sertifikat|standar/, "Sertifikat Standar"], [/pkkpr|kkpr/, "PKKPR"], [/\bpbg\b|\bimb\b/, "PBG / IMB"],
     [/amdal|ukl|upl|sppl|lingkungan/, "Persetujuan Lingkungan"], [/akta/, "Akta Pendirian"], [/npwp/, "NPWP"], [/\bktp\b/, labels.includes("KTP") ? "KTP" : "KTP Penanggung Jawab"],
     [/\bstr\b/, "STR"], [/ijazah/, "Ijazah"], [/rekomendasi/, "Surat Rekomendasi"], [/sehat/, "Surat Keterangan Sehat"], [/foto/, "Pas Foto"],
-    [/pernyataan/, "Surat Pernyataan"], [/\bsip\b|izin|ijin/, labels.includes("Surat Izin") ? "Surat Izin" : "Izin Usaha"],
+    [/pernyataan/, "Surat Pernyataan"], [/foto|lokasi/, "Foto Lokasi"], [/kemenkumham|\bsk\b/, "SK Kemenkumham"], [/kuasa/, "Surat Kuasa"], [/\bsip\b|izin|ijin/, labels.includes("Surat Izin") ? "Surat Izin" : "Izin Usaha"],
   ];
   for (const [re, l] of rules) if (re.test(n) && labels.includes(l)) return l;
   return "";

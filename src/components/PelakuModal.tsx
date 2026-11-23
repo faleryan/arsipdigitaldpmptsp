@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, Pencil, PlusCircle, Save, Trash2, X } from "lucide-react";
 import { Modal } from "./Modal";
+import { DocsPanel } from "./DocsPanel";
 import { FieldGrid } from "./FormFields";
 import { useAuth } from "../context/AuthContext";
 import { useData, usePelaku } from "../context/DataContext";
@@ -49,7 +50,7 @@ export function PelakuModal({ nib, onClose, startEdit = false }: { nib: string; 
   };
   const remove = async () => {
     if (!(await confirm({ title: "Hapus pelaku usaha?", body: <>Data pelaku <b>{p.nama_perusahaan}</b> (NIB {p.nib}) akan dihapus.</>, ok: "Hapus", danger: true }))) return;
-    try { await api.deletePelaku(nib); toast("Pelaku usaha dihapus"); onClose(); refresh(); } catch (x) { toast(api.errMsg(x), 6000); }
+    try { await api.deletePelaku(nib, p.pelaku_dokumen || []); toast("Pelaku usaha dihapus"); onClose(); refresh(); } catch (x) { toast(api.errMsg(x), 6000); }
   };
   const show = (k: FieldKey) => {
     const val = k === "tgl_terbit_oss" ? fmtDateLong(p.tgl_terbit_oss) : String(p[k as keyof typeof p] ?? "");
@@ -65,7 +66,8 @@ export function PelakuModal({ nib, onClose, startEdit = false }: { nib: string; 
             <span className="badge ok">{fmtInt(proyek.length)} proyek</span>
             <span className="badge">Investasi {fmtRpShort(inv)}</span>
             <span className="badge">{fmtInt(tki)} tenaga kerja</span>
-            <span className="badge">{fmtInt(nDoc)} dokumen</span>
+            <span className={"badge " + ((p.pelaku_dokumen?.length || 0) ? "nib" : "warn")}>{(p.pelaku_dokumen?.length || 0) ? `${p.pelaku_dokumen!.length} dok. pelaku` : "Dokumen NIB belum ada"}</span>
+            <span className="badge">{fmtInt(nDoc)} dok. proyek</span>
           </div>
         </div>
         <button className="icon-btn" onClick={onClose} aria-label="Tutup"><X size={18} /></button>
@@ -85,6 +87,8 @@ export function PelakuModal({ nib, onClose, startEdit = false }: { nib: string; 
             {PELAKU_FIELDS.map((f) => <div key={f.k}><dt>{PRETTY[f.k as FieldKey]}</dt><dd className={f.k === "nib" || f.k === "nik" ? "mono" : ""}>{show(f.k as FieldKey)}</dd></div>)}
           </dl>
         )}
+        <DocsPanel kind="pelaku" id={p.nib} docs={p.pelaku_dokumen || []} canWrite={canWrite} onChanged={async () => { await Promise.all([refresh(), oss.refresh()]); }}
+          title="Dokumen pelaku usaha" hint="NIB, akta pendirian, NPWP, KTP penanggung jawab — cukup diunggah sekali, berlaku untuk semua proyek NIB ini." />
         <div className="dsec">Proyek / KBLI <span className="count">{proyek.length}</span></div>
         {proyek.length ? (
           <div className="tbl-wrap"><table className="mini-tbl">
