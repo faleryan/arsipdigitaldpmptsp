@@ -13,6 +13,12 @@ Keduanya dilengkapi dashboard laporan, input manual, import Excel, dan penyimpan
 
 **Beranda** menampilkan ringkasan kedua sumber data, tren per bulan, dan daftar data yang terakhir diperbarui.
 
+### Data induk & arsip dokumen
+
+- **Pelaku Usaha (OSS):** satu NIB bisa punya banyak proyek/KBLI. Data pelaku (nama, NIK, alamat, dan seterusnya) disimpan sekali saja. Saat input proyek, cukup **pilih NIB atau nama pelaku usaha**. Bila data pelaku diubah, perubahannya berlaku untuk semua proyeknya.
+- **Pemohon (SiCantik):** satu pemohon bisa mengajukan banyak izin. Saat input permohonan, cukup **pilih No. KTP atau nama pemohon**.
+- **Arsip dokumen:** setiap proyek/permohonan bisa dilampiri **banyak dokumen** sekaligus (seret beberapa file). Setiap file diberi jenis dokumennya, mis. NIB, PKKPR, STR, atau KTP. Jenis dokumen ditebak otomatis dari nama file dan bisa diubah.
+
 ### Menu OSS RBA (`/oss`)
 
 | Halaman | Isi |
@@ -20,7 +26,8 @@ Keduanya dilengkapi dashboard laporan, input manual, import Excel, dan penyimpan
 | **Login** | Masuk dengan email & kata sandi. Hanya pengguna yang dibuat admin yang bisa masuk. |
 | **Dashboard** | Angka ringkas (total proyek, pelaku usaha/NIB, investasi, tenaga kerja, kelengkapan arsip), tren pengajuan per bulan, sebaran per kecamatan, risiko, skala usaha, sektor pembina, jenis perusahaan, 10 KBLI teratas, pelaku usaha teratas, dan rekap per kecamatan. Bisa difilter per tahun, bulan, dan kecamatan, lalu **diunduh sebagai laporan Excel** (9 sheet). |
 | **Data Arsip** | Tabel dengan pencarian, filter, dan pengurutan. Klik baris untuk detail lengkap, edit, hapus, serta **unggah/lihat dokumen PDF**. Export ke Excel dengan format 33 kolom asli. |
-| **Input Data** | Formulir manual. NIB yang sudah ada mengisi otomatis data pelaku usaha; KBLI yang pernah dipakai mengisi otomatis judul & sektor. |
+| **Pelaku Usaha** | Daftar pelaku usaha beserta jumlah proyek, investasi, TKI, dan dokumennya. Klik untuk melihat semua proyeknya, mengubah data pelaku, atau menambah proyek baru untuk pelaku tersebut. |
+| **Input Data** | Langkah 1: pilih pelaku usaha (cari NIB/nama), atau tambah pelaku baru. Langkah 2–4: data proyek, lokasi, dan KBLI. KBLI yang pernah dipakai mengisi otomatis judul & sektor. Langkah 5: unggah banyak dokumen. |
 | **Import Excel** | Seret file .xlsx/.xls/.csv dari OSS. Kolom dicocokkan otomatis, ada pratinjau (data baru / sudah ada / bermasalah), pilihan *perbarui* atau *lewati* data yang sudah ada. |
 
 ### Menu SiCantik (`/sicantik`)
@@ -29,7 +36,8 @@ Keduanya dilengkapi dashboard laporan, input manual, import Excel, dan penyimpan
 |---|---|
 | **Dashboard** | Total permohonan, jumlah yang sudah dan belum ditetapkan, rata-rata lama proses (tanggal permohonan sampai penetapan), dan pemohon unik. Grafik tren bulanan, kategori izin, jenis permohonan (Baru/Perpanjangan/Perubahan/Pencabutan), status penetapan, jenis izin terbanyak, lama proses per jenis izin, lokasi/fasilitas teratas, daftar permohonan yang paling lama belum ditetapkan, dan rekap per jenis izin. Ada **laporan Excel** (7 sheet). |
 | **Data Arsip** | Pencarian (pemohon, nomor izin, no. permohonan, KTP, lokasi), filter kategori, jenis izin, permohonan, status, tahun, dan arsip. Klik baris untuk detail, edit, hapus, dan unggah dokumen. |
-| **Input Data** | Formulir manual. Bila No. KTP sudah pernah tercatat, data pemohon terisi otomatis. ID dibuat otomatis bila dikosongkan. |
+| **Pemohon** | Daftar pemohon beserta jumlah permohonan, yang sudah ditetapkan, dan dokumennya. Klik untuk melihat semua izinnya, mengubah data pemohon, atau menambah permohonan baru. |
+| **Input Data** | Langkah 1: pilih pemohon (cari No. KTP/nama), atau tambah pemohon baru. Langkah 2–3: data izin & lokasi (ID dibuat otomatis bila dikosongkan). Langkah 4: unggah banyak dokumen. |
 | **Import Excel** | Kolom **ID** menjadi kunci. Nilai "-" pada nomor izin/tanggal penetapan dibaca sebagai *belum ditetapkan*. Import ulang rekap terbaru akan memperbarui status izin yang sudah ditetapkan. |
 
 ### Pengaturan
@@ -130,6 +138,7 @@ npx vercel --prod
 - Teks placeholder dari unduhan OSS ("Alamat Perusahaan", "kelurahan", "kecamatan", "kab_kota") bisa otomatis dikosongkan saat import.
 - Penulisan kecamatan yang berbeda (mis. `TasifetoTimur`) dikelompokkan sebagai `Tasifeto Timur` di dashboard. Data aslinya tidak diubah.
 - Saat import memperbarui data lama, dokumen yang sudah dilampirkan **tidak** terhapus.
+- Import membuat atau memperbarui **pelaku usaha per NIB** lebih dulu, lalu proyeknya. Kolom data pelaku yang kosong di file tidak menghapus data pelaku yang sudah ada.
 
 **SiCantik**
 - **ID** SiCantik menjadi kunci unik. Rekap bisa diimport berulang kali (mis. tiap bulan) tanpa data ganda.
@@ -137,23 +146,33 @@ npx vercel --prod
 - Status *Sudah ditetapkan* = ada nomor izin atau tanggal penetapan.
 - Lama proses = selisih hari antara **Tanggal** permohonan dan **Tanggal Penetapan**.
 - Kategori izin (Tenaga Kesehatan, Tata Ruang, PAUD, dll.) dikenali otomatis dari nama izin.
+- Pemohon dikenali dari **No. KTP** (bila berisi minimal 8 digit). Pemohon tanpa KTP yang valid dikenali dari namanya.
 
 ## Memperbarui database yang sudah ada
 
-Jika sebelumnya Anda sudah menjalankan `schema.sql` versi OSS saja, cukup **jalankan ulang seluruh isi `supabase/schema.sql`** di SQL Editor. Skrip ini aman dijalankan berulang: tabel SiCantik ditambahkan dan data OSS yang ada tidak berubah.
+Sudah memakai versi sebelumnya? Cukup **jalankan ulang seluruh isi `supabase/schema.sql`** di SQL Editor. Skrip ini otomatis:
+
+1. membuat tabel `pelaku_usaha` dan `sicantik_pemohon`,
+2. memindahkan data pelaku usaha dan pemohon dari baris proyek/izin yang sudah ada ke tabel tersebut (satu per NIB atau pemohon),
+3. menghubungkan proyek ke pelaku usaha dan izin ke pemohon.
+
+Tidak ada data atau dokumen yang hilang, dan skrip aman dijalankan berulang. Proyek lama yang NIB-nya kosong diberi NIB sementara `TANPA-NIB-<Id Proyek>`, yang bisa Anda perbaiki di menu **Pelaku Usaha**.
+
+> Sebaiknya *backup* dulu sebelum menjalankan: **Database → Backups**, atau ekspor data dari menu Data Arsip.
 
 ## Struktur folder
 
 ```
-supabase/schema.sql      skema database + keamanan + storage (jalankan sekali / ulang saat update)
+supabase/schema.sql      skema database + migrasi otomatis + keamanan + storage (jalankan saat pasang / update)
 src/lib/api.ts           semua komunikasi dengan Supabase
 src/lib/columns.ts       definisi 33 kolom Format Arsip OSS
 src/lib/sicantik.ts      definisi 13 kolom Rekap SiCantik, status, kategori, lama proses
 src/lib/format.ts        pembacaan tanggal/angka & format rupiah
 src/lib/excel.ts         import & export Excel
-src/pages/               Login, Beranda, halaman OSS (Dashboard, DataArsip, InputData, ImportExcel), Pengguna
-src/pages/sicantik/      halaman SiCantik (Dashboard, Data, Input, Import)
-src/components/          Layout, grafik, modal detail
+src/pages/               Login, Beranda, halaman OSS (Dashboard, DataArsip, Pelaku, InputData, ImportExcel), Pengguna
+src/pages/sicantik/      halaman SiCantik (Dashboard, Data, Pemohon, Input, Import)
+src/components/          Layout, grafik, modal detail, pemilih NIB/KTP (MasterPicker), unggah banyak dokumen (DocUploader)
+src/lib/forms.ts         definisi isian formulir & validasi
 vercel.json              agar alamat halaman (mis. /data) tidak 404 saat di-refresh
 ```
 

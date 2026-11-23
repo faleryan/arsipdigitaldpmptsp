@@ -28,7 +28,7 @@ function show(r: Proyek, k: FieldKey): string {
 }
 
 export function DetailModal({ id, onClose }: { id: string; onClose: () => void }) {
-  const { byId, refresh } = useData();
+  const { byId, rows, refresh } = useData();
   const { canWrite } = useAuth();
   const { toast, confirm } = useUI();
   const nav = useNavigate();
@@ -36,6 +36,7 @@ export function DetailModal({ id, onClose }: { id: string; onClose: () => void }
   const r = byId.get(id);
   if (!r) return null;
   const docs = r.oss_dokumen || [];
+  const nSama = rows.filter((x) => x.nib === r.nib).length;
 
   const remove = async () => {
     if (!(await confirm({ title: "Hapus data proyek?", body: <>Data <b>{r.nama_proyek || r.id_proyek}</b> beserta {docs.length} dokumennya akan dihapus. Tindakan ini tidak dapat dibatalkan.</>, ok: "Hapus", danger: true }))) return;
@@ -51,7 +52,9 @@ export function DetailModal({ id, onClose }: { id: string; onClose: () => void }
       <div className="modal-b">
         {SECTIONS.map(([title, keys]) => (
           <section key={title}>
-            <div className="dsec">{title}</div>
+            <div className="dsec">{title}
+              {title === "Pelaku usaha" && <button className="link small dsec-link" onClick={() => { onClose(); nav(`/oss/pelaku?nib=${encodeURIComponent(r.nib)}`); }}>Lihat pelaku usaha · {nSama} proyek →</button>}
+            </div>
             <dl className="dl">
               {keys.map((k) => {
                 let val = show(r, k);

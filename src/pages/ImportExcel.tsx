@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload } from "lucide-react";
-import { useData } from "../context/DataContext";
+import { useData, usePelaku } from "../context/DataContext";
 import { useUI } from "../context/UIContext";
-import { LABEL, type Proyek } from "../lib/columns";
+import { LABEL, PELAKU_KEYS, toPelaku, type Pelaku } from "../lib/columns";
 import { fmtDateLong, fmtInt, kecLabel } from "../lib/format";
 import type { ImportRow, ParsedSheet } from "../lib/excel";
 import * as api from "../lib/api";
@@ -13,6 +13,7 @@ type Stage = { kind: "pick" } | { kind: "reading" } | { kind: "error"; msg: stri
 
 export default function ImportExcel() {
   const { byId, refresh } = useData();
+  const pelakuStore = usePelaku();
   const { toast } = useUI();
   const [stage, setStage] = useState<Stage>({ kind: "pick" });
   const [cleanPh, setCleanPh] = useState(true);
@@ -44,21 +45,33 @@ export default function ImportExcel() {
     const rows = built?.rows || [];
     const valid = rows.filter((x) => !x.problem);
     const nNew = valid.filter((x) => !byId.has(x.rec.id_proyek)).length;
-    return { total: rows.length, valid, nNew, nUpd: valid.length - nNew, nBad: rows.length - valid.length, nDate: rows.filter((x) => x.dateWarn).length };
-  }, [built, byId]);
+    const nibs = new Set(valid.map((x) => x.rec.nib));
+    const nPelakuNew = [...nibs].filter((n) => !pelakuStore.byId.has(n)).length;
+    return { total: rows.length, valid, nNew, nUpd: valid.length - nNew, nBad: rows.length - valid.length, nDate: rows.filter((x) => x.dateWarn).length, nPelaku: nibs.size, nPelakuNew };
+  }, [built, byId, pelakuStore.byId]);
 
   const save = async () => {
     if (stage.kind !== "preview") return;
     const list = stats.valid.filter((x) => dup === "update" || !byId.has(x.rec.id_proyek));
     // pertahankan keterangan arsip lama bila kolom di file kosong
-    const rows: Proyek[] = list.map((x) => {
+    const rows = list.map((x) => {
       const cur = byId.get(x.rec.id_proyek);
       return cur && !x.rec.arsip_dokumen && cur.arsip_dokumen ? { ...x.rec, arsip_dokumen: cur.arsip_dokumen } : x.rec;
     });
+    // data induk pelaku usaha: satu per NIB; isian kosong di file tidak menimpa data lama
+    const pmap = new Map<string, Pelaku>();
+    for (const r of rows) {
+      const fromFile = toPelaku(r);
+      const base = pmap.get(r.nib) || pelakuStore.byId.get(r.nib);
+      if (!base) { pmap.set(r.nib, fromFile); continue; }
+      const merged = { ...base } as Record<string, unknown>;
+      for (const k of PELAKU_KEYS) { const v = fromFile[k]; if (v != null && v !== "") merged[k] = v; }
+      pmap.set(r.nib, merged as unknown as Pelaku);
+    }
     const nNew = list.filter((x) => !byId.has(x.rec.id_proyek)).length;
-    setProg({ done: 0, total: rows.length });
+    setProg({ done: 0, total: pmap.size + rows.length });
     try {
-      await api.upsertBatch(rows, { skipExisting: dup === "skip", fileName: stage.P.fileName }, (done, total) => setProg({ done, total }));
+      await api.importOss([...pmap.values()], rows, { skipExisting: dup === "skip", fileName: stage.P.fileName }, (done, total) => setProg({ done, total }));
       await refresh();
       setStage({ kind: "done", nNew, nUpd: rows.length - nNew });
     } catch (e) {
@@ -106,6 +119,7 @@ export default function ImportExcel() {
               <div className="stat"><b>{fmtInt(stats.total)}</b><span>baris data</span></div>
               <div className="stat good"><b>{fmtInt(stats.nNew)}</b><span>data baru</span></div>
               <div className="stat"><b>{fmtInt(stats.nUpd)}</b><span>sudah ada di arsip</span></div>
+              <div className="stat"><b>{fmtInt(stats.nPelaku)}</b><span>pelaku usaha ({fmtInt(stats.nPelakuNew)} baru)</span></div>
               <div className={"stat" + (stats.nBad ? " bad" : "")}><b>{fmtInt(stats.nBad)}</b><span>bermasalah (dilewati)</span></div>
             </div>
             <p className="muted">
@@ -145,7 +159,7 @@ export default function ImportExcel() {
               </table>
             </div>
             {built.rows.length > 300 && <p className="cell-sub">Menampilkan 300 baris pertama dari {fmtInt(built.rows.length)}.</p>}
-            {prog && <><div className="progress"><i style={{ width: `${(prog.done / Math.max(1, prog.total)) * 100}%` }} /></div><div className="cell-sub">Menyimpan {fmtInt(prog.done)} / {fmtInt(prog.total)}…</div></>}
+            {prog && <><div className="progress"><i style={{ width: `${(prog.done / Math.max(1, prog.total)) * 100}%` }} /></div><div className="cell-sub">Menyimpan pelaku usaha & proyek… {fmtInt(prog.done)} / {fmtInt(prog.total)}</div></>}
             <div className="form-actions static">
               <button className="btn" disabled={!!prog} onClick={() => { setStage({ kind: "pick" }); setBuilt(null); setP(null); }}>Batal / pilih file lain</button>
               <button id="impGo" className="btn primary" disabled={!!prog || !stats.valid.length || (dup === "skip" && !stats.nNew)} onClick={save}>

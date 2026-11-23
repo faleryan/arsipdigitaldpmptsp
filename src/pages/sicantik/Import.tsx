@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload } from "lucide-react";
-import { useSicantik } from "../../context/DataContext";
+import { usePemohon, useSicantik } from "../../context/DataContext";
 import { useUI } from "../../context/UIContext";
 import { fmtDateLong, fmtInt } from "../../lib/format";
-import { izinShort, SIC_LABEL, type Izin } from "../../lib/sicantik";
+import { izinShort, SIC_LABEL, toPemohon, type Izin, type Pemohon } from "../../lib/sicantik";
 import type { IzinRow, ParsedSheet } from "../../lib/excel";
 import * as api from "../../lib/api";
 import { StatusBanner } from "../../components/StatusBanner";
@@ -14,6 +14,7 @@ type Stage = { kind: "pick" } | { kind: "reading" } | { kind: "error"; msg: stri
 
 export default function SicantikImport() {
   const { byId, refresh } = useSicantik();
+  const pemohonStore = usePemohon();
   const { toast } = useUI();
   const [stage, setStage] = useState<Stage>({ kind: "pick" });
   const [dup, setDup] = useState<"update" | "skip">("update");
@@ -26,7 +27,13 @@ export default function SicantikImport() {
     try {
       const x = await import("../../lib/excel");
       const P = await x.readWorkbook(file, x.SIC_SPEC);
-      setStage({ kind: "preview", P, rows: x.buildIzinRows(P).rows });
+      // cocokkan pemohon dengan data induk: No. KTP yang sama → pemohon yang sama
+      const byKtp = new Map(pemohonStore.rows.filter((p) => /^\d{8,}$/.test(p.no_ktp)).map((p) => [p.no_ktp, p.id_pemohon]));
+      const rows = x.buildIzinRows(P).rows.map((r) => {
+        const id = (r.rec.no_ktp && byKtp.get(r.rec.no_ktp)) || r.rec.pemohon_id;
+        return { ...r, rec: { ...r.rec, pemohon_id: id } };
+      });
+      setStage({ kind: "preview", P, rows });
     } catch (e) { setStage({ kind: "error", msg: (e as Error).message || String(e) }); }
   };
 
@@ -34,8 +41,10 @@ export default function SicantikImport() {
     const rows = stage.kind === "preview" ? stage.rows : [];
     const valid = rows.filter((x) => !x.problem);
     const nNew = valid.filter((x) => !byId.has(x.rec.id_sicantik)).length;
-    return { total: rows.length, valid, nNew, nUpd: valid.length - nNew, nBad: rows.length - valid.length, nDate: rows.filter((x) => x.dateWarn).length, nPending: valid.filter((x) => !x.rec.nomor_izin).length };
-  }, [stage, byId]);
+    const pids = new Set(valid.map((x) => x.rec.pemohon_id));
+    const nPemohonNew = [...pids].filter((id) => !pemohonStore.byId.has(id)).length;
+    return { total: rows.length, valid, nNew, nUpd: valid.length - nNew, nBad: rows.length - valid.length, nDate: rows.filter((x) => x.dateWarn).length, nPending: valid.filter((x) => !x.rec.nomor_izin).length, nPemohon: pids.size, nPemohonNew };
+  }, [stage, byId, pemohonStore.byId]);
 
   const save = async () => {
     if (stage.kind !== "preview") return;
@@ -44,10 +53,20 @@ export default function SicantikImport() {
       const cur = byId.get(x.rec.id_sicantik);
       return cur && !x.rec.keterangan && cur.keterangan ? { ...x.rec, keterangan: cur.keterangan } : x.rec;
     });
+    // data induk pemohon: satu per pemohon; isian kosong di file tidak menimpa data lama
+    const pmap = new Map<string, Pemohon>();
+    for (const r of rows) {
+      const fromFile = toPemohon(r);
+      const base = pmap.get(r.pemohon_id) || pemohonStore.byId.get(r.pemohon_id);
+      pmap.set(r.pemohon_id, base ? {
+        ...base, nama: fromFile.nama || base.nama, no_ktp: fromFile.no_ktp || base.no_ktp,
+        no_hp: fromFile.no_hp || base.no_hp, email: fromFile.email || base.email,
+      } : fromFile);
+    }
     const nNew = list.filter((x) => !byId.has(x.rec.id_sicantik)).length;
-    setProg({ done: 0, total: rows.length });
+    setProg({ done: 0, total: pmap.size + rows.length });
     try {
-      await api.upsertIzinBatch(rows, { skipExisting: dup === "skip", fileName: stage.P.fileName }, (done, total) => setProg({ done, total }));
+      await api.importSicantik([...pmap.values()], rows, { skipExisting: dup === "skip", fileName: stage.P.fileName }, (done, total) => setProg({ done, total }));
       await refresh();
       setStage({ kind: "done", nNew, nUpd: rows.length - nNew });
     } catch (e) { toast(api.errMsg(e), 6000); }
@@ -94,6 +113,7 @@ export default function SicantikImport() {
               <div className="stat"><b>{fmtInt(stats.total)}</b><span>baris data</span></div>
               <div className="stat good"><b>{fmtInt(stats.nNew)}</b><span>data baru</span></div>
               <div className="stat"><b>{fmtInt(stats.nUpd)}</b><span>sudah ada di arsip</span></div>
+              <div className="stat"><b>{fmtInt(stats.nPemohon)}</b><span>pemohon ({fmtInt(stats.nPemohonNew)} baru)</span></div>
               <div className="stat"><b>{fmtInt(stats.nPending)}</b><span>belum ditetapkan</span></div>
               <div className={"stat" + (stats.nBad ? " bad" : "")}><b>{fmtInt(stats.nBad)}</b><span>bermasalah (dilewati)</span></div>
             </div>

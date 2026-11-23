@@ -54,6 +54,29 @@ export interface Proyek {
 
 export type FieldKey = Exclude<keyof Proyek, "sumber" | "file_import" | "created_at" | "updated_at" | "oss_dokumen">;
 
+/** Data induk pelaku usaha (satu NIB → banyak proyek) */
+export interface Pelaku {
+  nib: string;
+  nama_perusahaan: string;
+  jenis_perusahaan: string;
+  status_pm: string;
+  tgl_terbit_oss: string | null;
+  nik: string;
+  nohp: string;
+  email: string;
+  username: string;
+  alamat_perusahaan: string;
+  kel_perusahaan: string;
+  kec_perusahaan: string;
+  kab_perusahaan: string;
+  created_at?: string;
+  updated_at?: string;
+}
+export const PELAKU_KEYS = [
+  "nib", "nama_perusahaan", "jenis_perusahaan", "status_pm", "tgl_terbit_oss", "nik", "nohp", "email", "username",
+  "alamat_perusahaan", "kel_perusahaan", "kec_perusahaan", "kab_perusahaan",
+] as const satisfies readonly FieldKey[];
+
 export const COLS: [FieldKey | "no", string][] = [
   ["no", "No."],
   ["id_proyek", "Id Proyek"],
@@ -95,6 +118,15 @@ export const TEXT_KEYS = FIELD_KEYS.filter(
   (k) => !["tgl_terbit_oss", "tgl_pengajuan", "luas_tanah", "investasi", "tki"].includes(k),
 );
 export const LABEL: Record<string, string> = Object.fromEntries(COLS);
+/** Kolom yang disimpan di tabel oss_proyek (nib sebagai penghubung ke pelaku usaha) */
+export const PROYEK_KEYS = FIELD_KEYS.filter((k) => k === "nib" || !(PELAKU_KEYS as readonly string[]).includes(k));
+
+export function pick<T extends object>(o: T, keys: readonly string[]): Record<string, unknown> {
+  const r: Record<string, unknown> = {};
+  for (const k of keys) if (k in o) r[k] = (o as Record<string, unknown>)[k];
+  return r;
+}
+export const toPelaku = (r: Proyek | Pelaku): Pelaku => pick(r, PELAKU_KEYS) as unknown as Pelaku;
 
 export const PRETTY: Record<FieldKey, string> = {
   id_proyek: "Id Proyek", jenis_proyek: "Uraian Jenis Proyek", nib: "NIB", nik: "NIK", nohp: "No. HP", email: "Email",

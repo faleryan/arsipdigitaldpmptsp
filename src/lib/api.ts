@@ -1,7 +1,7 @@
 // Lapisan akses data — semua komunikasi dengan Supabase ada di file ini.
 import { createClient, type Session } from "@supabase/supabase-js";
-import type { Dokumen, Proyek } from "./columns";
-import type { Izin } from "./sicantik";
+import { PELAKU_KEYS, PROYEK_KEYS, pick, type Dokumen, type Pelaku, type Proyek } from "./columns";
+import { IZIN_KEYS, type Izin, type Pemohon } from "./sicantik";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -22,7 +22,8 @@ const sb = () => {
 export function errMsg(e: unknown): string {
   const err = e as { message?: string; code?: string; status?: number } | null;
   const m = err?.message || String(e);
-  if (err?.code === "23505") return "Data dengan Id Proyek tersebut sudah ada.";
+  if (err?.code === "23505") return "Data dengan kunci (Id Proyek / NIB / ID) tersebut sudah ada.";
+  if (err?.code === "23503") return "Data masih terhubung dengan data lain (mis. pelaku usaha masih punya proyek), atau data induknya belum ada.";
   if (err?.code === "42501" || /row-level security|permission denied/i.test(m)) return "Anda tidak memiliki izin untuk tindakan ini. Hubungi admin.";
   if (/Invalid login credentials/i.test(m)) return "Email atau kata sandi salah.";
   if (/Email not confirmed/i.test(m)) return "Email belum dikonfirmasi. Hubungi admin.";
@@ -67,22 +68,18 @@ export async function updateProfile(id: string, patch: Partial<Pick<Profile, "ro
   if (error) throw error;
 }
 
-/* ---------------- Data proyek ---------------- */
-const SELECT = "*, oss_dokumen(*)";
-
-/** Ambil semua data (dipaginasi per 1000 baris, batas bawaan Supabase) */
-export async function fetchAll(): Promise<Proyek[]> {
-  const out: Proyek[] = [];
-  const size = 1000;
+/* ---------------- Utilitas ---------------- */
+async function fetchPaged<T>(table: string, select: string, order: string): Promise<T[]> {
+  const out: T[] = [];
+  const size = 1000; // batas bawaan Supabase per permintaan
   for (let from = 0; ; from += size) {
-    const { data, error } = await sb().from("oss_proyek").select(SELECT).order("id_proyek").range(from, from + size - 1);
+    const { data, error } = await sb().from(table).select(select).order(order).range(from, from + size - 1);
     if (error) throw error;
-    out.push(...((data || []) as Proyek[]));
+    out.push(...((data || []) as T[]));
     if (!data || data.length < size) break;
   }
   return out;
 }
-
 /** Berlangganan perubahan data (realtime). Mengembalikan fungsi untuk berhenti. */
 export function subscribe(name: string, tables: string[], onChange: () => void) {
   let ch = sb().channel(name);
@@ -90,19 +87,41 @@ export function subscribe(name: string, tables: string[], onChange: () => void) 
   ch.subscribe();
   return () => { sb().removeChannel(ch); };
 }
+async function upsertChunks(table: string, rows: Record<string, unknown>[], onConflict: string, ignoreDuplicates: boolean, onStep?: (n: number) => void) {
+  const size = 300;
+  for (let i = 0; i < rows.length; i += size) {
+    const chunk = rows.slice(i, i + size);
+    const { error } = await sb().from(table).upsert(chunk, { onConflict, ignoreDuplicates });
+    if (error) throw error;
+    onStep?.(chunk.length);
+  }
+}
 
-const strip = (r: Partial<Proyek>) => {
-  const o: Record<string, unknown> = { ...r };
-  delete o.oss_dokumen; delete o.created_at; delete o.updated_at;
-  return o;
-};
+/* ---------------- Pelaku usaha (OSS) ---------------- */
+export const fetchPelaku = () => fetchPaged<Pelaku>("pelaku_usaha", "*", "nib");
+export async function insertPelaku(p: Pelaku) {
+  const { error } = await sb().from("pelaku_usaha").insert(pick(p, PELAKU_KEYS));
+  if (error) throw error;
+}
+/** Ubah data pelaku; NIB baru otomatis ikut berubah di semua proyeknya */
+export async function updatePelaku(nib: string, p: Partial<Pelaku>) {
+  const { error } = await sb().from("pelaku_usaha").update(pick(p, PELAKU_KEYS)).eq("nib", nib);
+  if (error) throw error;
+}
+export async function deletePelaku(nib: string) {
+  const { error } = await sb().from("pelaku_usaha").delete().eq("nib", nib);
+  if (error) throw error;
+}
+
+/* ---------------- Proyek OSS ---------------- */
+export const fetchProyek = () => fetchPaged<Proyek>("oss_proyek", "*, oss_dokumen(*)", "id_proyek");
 
 export async function insertProyek(rec: Proyek) {
-  const { error } = await sb().from("oss_proyek").insert({ ...strip(rec), sumber: "manual" });
+  const { error } = await sb().from("oss_proyek").insert({ ...pick(rec, PROYEK_KEYS), sumber: "manual" });
   if (error) throw error;
 }
 export async function updateProyek(id: string, rec: Partial<Proyek>) {
-  const { error } = await sb().from("oss_proyek").update(strip(rec)).eq("id_proyek", id);
+  const { error } = await sb().from("oss_proyek").update(pick(rec, PROYEK_KEYS)).eq("id_proyek", id);
   if (error) throw error;
 }
 export async function deleteProyek(id: string, docs: Dokumen[] = []) {
@@ -110,55 +129,60 @@ export async function deleteProyek(id: string, docs: Dokumen[] = []) {
   const { error } = await sb().from("oss_proyek").delete().eq("id_proyek", id);
   if (error) throw error;
 }
-export async function deleteAll(rows: Proyek[], onProgress?: (done: number, total: number) => void) {
+/** Hapus semua proyek + pelaku usaha + file dokumennya */
+export async function deleteAllOss(rows: Proyek[], pelaku: Pelaku[], onProgress?: (done: number, total: number) => void) {
   const paths = rows.flatMap((r) => (r.oss_dokumen || []).map((d) => d.path));
   for (let i = 0; i < paths.length; i += 500) await sb().storage.from(BUCKET).remove(paths.slice(i, i + 500));
+  const total = rows.length + pelaku.length;
   const ids = rows.map((r) => r.id_proyek);
   for (let i = 0; i < ids.length; i += 200) {
     const { error } = await sb().from("oss_proyek").delete().in("id_proyek", ids.slice(i, i + 200));
     if (error) throw error;
-    onProgress?.(Math.min(i + 200, ids.length), ids.length);
+    onProgress?.(Math.min(i + 200, ids.length), total);
+  }
+  const nibs = pelaku.map((p) => p.nib);
+  for (let i = 0; i < nibs.length; i += 200) {
+    const { error } = await sb().from("pelaku_usaha").delete().in("nib", nibs.slice(i, i + 200));
+    if (error) throw error;
+    onProgress?.(ids.length + Math.min(i + 200, nibs.length), total);
   }
 }
-
-/** Simpan banyak baris sekaligus. skipExisting=true → data yang sudah ada tidak diubah. */
-export async function upsertBatch(
-  rows: Proyek[],
-  opts: { skipExisting: boolean; fileName: string },
+/** Import OSS: simpan pelaku usaha dulu, lalu proyeknya */
+export async function importOss(
+  pelaku: Pelaku[], proyek: Proyek[], opts: { skipExisting: boolean; fileName: string },
   onProgress?: (done: number, total: number) => void,
 ) {
-  const size = 300;
-  for (let i = 0; i < rows.length; i += size) {
-    const chunk = rows.slice(i, i + size).map((r) => ({ ...strip(r), sumber: "import", file_import: opts.fileName }));
-    const { error } = await sb().from("oss_proyek").upsert(chunk, { onConflict: "id_proyek", ignoreDuplicates: opts.skipExisting });
-    if (error) throw error;
-    onProgress?.(Math.min(i + size, rows.length), rows.length);
-  }
+  const total = pelaku.length + proyek.length;
+  let done = 0;
+  const step = (n: number) => { done += n; onProgress?.(done, total); };
+  await upsertChunks("pelaku_usaha", pelaku.map((p) => pick(p, PELAKU_KEYS)), "nib", opts.skipExisting, step);
+  await upsertChunks("oss_proyek", proyek.map((r) => ({ ...pick(r, PROYEK_KEYS), sumber: "import", file_import: opts.fileName })), "id_proyek", opts.skipExisting, step);
 }
 
-/* ---------------- Data SiCantik ---------------- */
-export async function fetchAllSicantik(): Promise<Izin[]> {
-  const out: Izin[] = [];
-  const size = 1000;
-  for (let from = 0; ; from += size) {
-    const { data, error } = await sb().from("sicantik_izin").select("*, sicantik_dokumen(*)").order("id_sicantik").range(from, from + size - 1);
-    if (error) throw error;
-    out.push(...((data || []) as Izin[]));
-    if (!data || data.length < size) break;
-  }
-  return out;
+/* ---------------- Pemohon (SiCantik) ---------------- */
+const PEMOHON_KEYS = ["id_pemohon", "nama", "no_ktp", "no_hp", "email"];
+export const fetchPemohon = () => fetchPaged<Pemohon>("sicantik_pemohon", "*", "id_pemohon");
+export async function insertPemohon(p: Pemohon) {
+  const { error } = await sb().from("sicantik_pemohon").insert(pick(p, PEMOHON_KEYS));
+  if (error) throw error;
 }
-const stripIzin = (r: Partial<Izin>) => {
-  const o: Record<string, unknown> = { ...r };
-  delete o.sicantik_dokumen; delete o.created_at; delete o.updated_at;
-  return o;
-};
+export async function updatePemohon(id: string, p: Partial<Pemohon>) {
+  const { error } = await sb().from("sicantik_pemohon").update(pick(p, PEMOHON_KEYS)).eq("id_pemohon", id);
+  if (error) throw error;
+}
+export async function deletePemohon(id: string) {
+  const { error } = await sb().from("sicantik_pemohon").delete().eq("id_pemohon", id);
+  if (error) throw error;
+}
+
+/* ---------------- Permohonan izin SiCantik ---------------- */
+export const fetchIzin = () => fetchPaged<Izin>("sicantik_izin", "*, sicantik_dokumen(*)", "id_sicantik");
 export async function insertIzin(rec: Izin) {
-  const { error } = await sb().from("sicantik_izin").insert({ ...stripIzin(rec), sumber: "manual" });
+  const { error } = await sb().from("sicantik_izin").insert({ ...pick(rec, IZIN_KEYS), sumber: "manual" });
   if (error) throw error;
 }
 export async function updateIzin(id: string, rec: Partial<Izin>) {
-  const { error } = await sb().from("sicantik_izin").update(stripIzin(rec)).eq("id_sicantik", id);
+  const { error } = await sb().from("sicantik_izin").update(pick(rec, IZIN_KEYS)).eq("id_sicantik", id);
   if (error) throw error;
 }
 export async function deleteIzin(id: string, docs: Dokumen[] = []) {
@@ -166,28 +190,32 @@ export async function deleteIzin(id: string, docs: Dokumen[] = []) {
   const { error } = await sb().from("sicantik_izin").delete().eq("id_sicantik", id);
   if (error) throw error;
 }
-export async function deleteAllIzin(rows: Izin[], onProgress?: (done: number, total: number) => void) {
+export async function deleteAllSicantik(rows: Izin[], pemohon: Pemohon[], onProgress?: (done: number, total: number) => void) {
   const paths = rows.flatMap((r) => (r.sicantik_dokumen || []).map((d) => d.path));
   for (let i = 0; i < paths.length; i += 500) await sb().storage.from(BUCKET).remove(paths.slice(i, i + 500));
+  const total = rows.length + pemohon.length;
   const ids = rows.map((r) => r.id_sicantik);
   for (let i = 0; i < ids.length; i += 200) {
     const { error } = await sb().from("sicantik_izin").delete().in("id_sicantik", ids.slice(i, i + 200));
     if (error) throw error;
-    onProgress?.(Math.min(i + 200, ids.length), ids.length);
+    onProgress?.(Math.min(i + 200, ids.length), total);
+  }
+  const pids = pemohon.map((p) => p.id_pemohon);
+  for (let i = 0; i < pids.length; i += 200) {
+    const { error } = await sb().from("sicantik_pemohon").delete().in("id_pemohon", pids.slice(i, i + 200));
+    if (error) throw error;
+    onProgress?.(ids.length + Math.min(i + 200, pids.length), total);
   }
 }
-export async function upsertIzinBatch(
-  rows: Izin[],
-  opts: { skipExisting: boolean; fileName: string },
+export async function importSicantik(
+  pemohon: Pemohon[], izin: Izin[], opts: { skipExisting: boolean; fileName: string },
   onProgress?: (done: number, total: number) => void,
 ) {
-  const size = 300;
-  for (let i = 0; i < rows.length; i += size) {
-    const chunk = rows.slice(i, i + size).map((r) => ({ ...stripIzin(r), sumber: "import", file_import: opts.fileName }));
-    const { error } = await sb().from("sicantik_izin").upsert(chunk, { onConflict: "id_sicantik", ignoreDuplicates: opts.skipExisting });
-    if (error) throw error;
-    onProgress?.(Math.min(i + size, rows.length), rows.length);
-  }
+  const total = pemohon.length + izin.length;
+  let done = 0;
+  const step = (n: number) => { done += n; onProgress?.(done, total); };
+  await upsertChunks("sicantik_pemohon", pemohon.map((p) => pick(p, PEMOHON_KEYS)), "id_pemohon", opts.skipExisting, step);
+  await upsertChunks("sicantik_izin", izin.map((r) => ({ ...pick(r, IZIN_KEYS), sumber: "import", file_import: opts.fileName })), "id_sicantik", opts.skipExisting, step);
 }
 
 /* ---------------- Dokumen (OSS & SiCantik) ---------------- */

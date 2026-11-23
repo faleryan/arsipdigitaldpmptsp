@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Download, FileText, Link2, PlusCircle, Search, Trash2, X } from "lucide-react";
-import { useSicantik } from "../../context/DataContext";
+import { usePemohon, useSicantik } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
 import { useUI } from "../../context/UIContext";
 import { fmtDateLong, fmtInt, isISO } from "../../lib/format";
@@ -18,6 +18,7 @@ const hasArsipIzin = (r: Izin) => (r.sicantik_dokumen?.length || 0) > 0 || !!r.k
 
 export default function SicantikData() {
   const { rows: all, loaded, refresh } = useSicantik();
+  const pemohonStore = usePemohon();
   const { canWrite, isAdmin } = useAuth();
   const { toast, confirm } = useUI();
   const [params, setParams] = useSearchParams();
@@ -30,6 +31,7 @@ export default function SicantikData() {
   const openId = params.get("id");
   const setOpen = (id: string | null) => { const p = new URLSearchParams(params); if (id) p.set("id", id); else p.delete("id"); setParams(p, { replace: !id }); };
 
+  const perPemohon = useMemo(() => { const m = new Map<string, number>(); all.forEach((r) => m.set(r.pemohon_id, (m.get(r.pemohon_id) || 0) + 1)); return m; }, [all]);
   const kats = useMemo(() => [...new Set(all.map((r) => kategoriIzin(r.izin)))].sort(), [all]);
   const izins = useMemo(() => [...new Set(all.map((r) => r.izin).filter(Boolean))].sort((a, b) => izinShort(a).localeCompare(izinShort(b), "id")), [all]);
   const years = useMemo(() => [...new Set(all.map((r) => (isISO(r.tanggal) ? r.tanggal.slice(0, 4) : "")).filter(Boolean))].sort().reverse(), [all]);
@@ -72,9 +74,9 @@ export default function SicantikData() {
   );
   const exportXlsx = async () => { try { (await import("../../lib/excel")).exportIzin(rows); } catch (e) { toast("Gagal export: " + (e as Error).message); } };
   const wipeAll = async () => {
-    if (!(await confirm({ title: "Kosongkan semua data SiCantik?", body: <>Seluruh <b>{fmtInt(all.length)}</b> data permohonan beserta file dokumennya akan dihapus permanen.</>, ok: "Hapus semua", danger: true, typeWord: "HAPUS" }))) return;
-    setWipe({ done: 0, total: all.length });
-    try { await api.deleteAllIzin(all, (done, total) => setWipe({ done, total })); toast("Semua data SiCantik dihapus"); }
+    if (!(await confirm({ title: "Kosongkan semua data SiCantik?", body: <>Seluruh <b>{fmtInt(all.length)}</b> permohonan, <b>{fmtInt(pemohonStore.rows.length)}</b> pemohon, beserta file dokumennya akan dihapus permanen.</>, ok: "Hapus semua", danger: true, typeWord: "HAPUS" }))) return;
+    setWipe({ done: 0, total: all.length + pemohonStore.rows.length });
+    try { await api.deleteAllSicantik(all, pemohonStore.rows, (done, total) => setWipe({ done, total })); toast("Semua data SiCantik dihapus"); }
     catch (e) { toast(api.errMsg(e), 5000); }
     setWipe(null);
     refresh();
@@ -117,7 +119,7 @@ export default function SicantikData() {
                 <thead><tr>{th("pemohon", "Pemohon")}{th("izin", "Izin / nomor")}{th("jenis", "Permohonan")}{th("lokasi", "Lokasi")}{th("tanggal", "Tgl permohonan")}{th("tgl_penetapan", "Tgl penetapan")}<th>Arsip</th></tr></thead>
                 <tbody>{pageRows.map((r) => (
                   <tr key={r.id_sicantik} className="clk" tabIndex={0} onClick={() => setOpen(r.id_sicantik)} onKeyDown={(e) => e.key === "Enter" && setOpen(r.id_sicantik)}>
-                    <td><div className="cell-main">{r.pemohon}</div><div className="cell-sub mono">ID {r.id_sicantik}</div></td>
+                    <td><div className="cell-main">{r.pemohon}</div><div className="cell-sub mono">ID {r.id_sicantik}{(perPemohon.get(r.pemohon_id) || 0) > 1 && <span className="multi"> · {perPemohon.get(r.pemohon_id)} izin</span>}</div></td>
                     <td><div title={r.izin}>{izinShort(r.izin)}</div><div className="cell-sub mono">{r.nomor_izin || "—"}</div></td>
                     <td><JenisBadge v={r.jenis} /></td>
                     <td>{r.lokasi || <span className="cell-sub">—</span>}</td>

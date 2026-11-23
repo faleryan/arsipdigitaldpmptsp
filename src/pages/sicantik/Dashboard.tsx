@@ -51,7 +51,7 @@ export default function SicantikDashboard() {
   }), [all, year, month, kat]);
 
   const tot = useMemo(() => groupIzin(rows, () => "all")[0], [rows]);
-  const pemohon = useMemo(() => new Set(rows.map((r) => r.no_ktp || r.pemohon.toLowerCase().trim())).size, [rows]);
+  const pemohon = useMemo(() => new Set(rows.map((r) => r.pemohon_id)).size, [rows]);
   const arsip = rows.filter((r) => (r.sicantik_dokumen?.length || 0) > 0 || !!r.keterangan).length;
   const period = year === "all" ? "Semua periode" : month === "all" ? `Tahun ${year}` : `${BULAN[+month - 1]} ${year}`;
   const scope = period + (kat === "all" ? " · semua kategori izin" : ` · ${kat}`);

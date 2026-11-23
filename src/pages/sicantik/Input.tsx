@@ -1,196 +1,178 @@
-import { useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { FileText, Loader2, Paperclip, Save, X } from "lucide-react";
-import { useSicantik } from "../../context/DataContext";
+import { useMemo, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { FileText, Loader2, Pencil, Save, UserPlus, Users } from "lucide-react";
+import { usePemohon, useSicantik } from "../../context/DataContext";
 import { useUI } from "../../context/UIContext";
-import { isISO, pad2 } from "../../lib/format";
-import { JENIS_PERMOHONAN, normalizeIzin, SIC_PRETTY, type Izin, type SicKey } from "../../lib/sicantik";
+import { pad2 } from "../../lib/format";
+import { IZIN_SECTIONS, PEMOHON_FIELDS, pemohonPickItem, toFormValues, validateIzin, validatePemohon } from "../../lib/forms";
+import { normalizeIzin, pemohonIdOf, type Izin } from "../../lib/sicantik";
 import * as api from "../../lib/api";
 import { Loading } from "../../components/Loading";
 import { StatusBanner } from "../../components/StatusBanner";
+import { FieldGrid } from "../../components/FormFields";
+import { MasterPicker } from "../../components/MasterPicker";
+import { DocUploader, LABELS_SICANTIK, type PendingDoc } from "../../components/DocUploader";
+import { uploadAll } from "../../components/DocsPanel";
+import { PemohonModal } from "../../components/PemohonModal";
 
-type FType = "text" | "select" | "list" | "date" | "email" | "tel";
-interface Field { k: SicKey; type?: FType; req?: boolean; hint?: string; span?: 2 | 3; opts?: string[]; dyn?: SicKey }
-
-const FORM: { title: string; desc: string; fields: Field[] }[] = [
-  { title: "Data izin", desc: "Jenis izin, permohonan, dan penetapan", fields: [
-    { k: "izin", type: "list", dyn: "izin", req: true, span: 2, hint: "Pilih dari daftar atau ketik nama izin baru" },
-    { k: "jenis", type: "select", opts: JENIS_PERMOHONAN, req: true },
-    { k: "tanggal", type: "date", req: true },
-    { k: "no_permohonan", hint: "Contoh: 1049/500.16.7.1.Resi/DPMPTSP/XI/2026" },
-    { k: "id_sicantik", hint: "Kosongkan untuk dibuat otomatis" },
-    { k: "nomor_izin", span: 2, hint: "Kosongkan bila izin belum ditetapkan" },
-    { k: "tgl_penetapan", type: "date" },
-  ] },
-  { title: "Pemohon", desc: "Isi No. KTP terlebih dahulu — data pemohon yang sudah pernah tercatat akan terisi otomatis", fields: [
-    { k: "no_ktp", hint: "Angka saja" },
-    { k: "pemohon", req: true, span: 2 },
-    { k: "no_hp", type: "tel" },
-    { k: "email", type: "email", span: 2 },
-  ] },
-  { title: "Lokasi", desc: "Tempat praktik / lokasi kegiatan", fields: [
-    { k: "lokasi", type: "list", dyn: "lokasi", span: 2 },
-    { k: "lokasi_izin", type: "list", dyn: "lokasi", hint: "Kosongkan bila sama dengan lokasi" },
-  ] },
-];
-const ALL = FORM.flatMap((s) => s.fields);
-const toForm = (r?: Izin) => {
-  const o: Record<string, string> = {};
-  for (const f of ALL) o[f.k] = r ? String(r[f.k] ?? "") : "";
-  o.keterangan = r?.keterangan || "";
-  if (!r) o.jenis = "Baru";
-  return o;
-};
+const IZIN_FIELDS = IZIN_SECTIONS.flatMap((s) => s.fields);
 const autoId = () => { const d = new Date(); return `M-${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`; };
 
 export default function SicantikInput() {
   const { id } = useParams();
+  const [params] = useSearchParams();
   const editId = id ? decodeURIComponent(id) : null;
-  const store = useSicantik();
-  const editing = editId ? store.byId.get(editId) : undefined;
-  if (!store.loaded) return <Loading />;
+  const sic = useSicantik();
+  const pem = usePemohon();
+  const editing = editId ? sic.byId.get(editId) : undefined;
+  if (!sic.loaded || !pem.loaded) return <Loading />;
   if (editId && !editing) return <div className="card pad">Data <span className="mono">{editId}</span> tidak ditemukan.</div>;
-  return <Form key={editId || "new"} editing={editing} />;
+  return <Form key={editId || "new"} editing={editing} initialPemohon={params.get("pemohon")} />;
 }
 
-function Form({ editing }: { editing?: Izin }) {
+function Form({ editing, initialPemohon }: { editing?: Izin; initialPemohon: string | null }) {
   const { rows, byId, refresh } = useSicantik();
+  const pem = usePemohon();
   const { toast } = useUI();
   const nav = useNavigate();
-  const [v, setV] = useState<Record<string, string>>(() => toForm(editing));
+
+  const [pid, setPid] = useState<string | null>(editing?.pemohon_id || (initialPemohon && pem.byId.has(initialPemohon) ? initialPemohon : null));
+  const [newMode, setNewMode] = useState(false);
+  const [pv, setPv] = useState<Record<string, string>>(() => toFormValues(undefined, PEMOHON_FIELDS));
+  const [perrs, setPerrs] = useState<Record<string, string>>({});
+  const [pickErr, setPickErr] = useState("");
+  const [editPemohon, setEditPemohon] = useState(false);
+
+  const [v, setV] = useState<Record<string, string>>(() => ({ ...toFormValues(editing, IZIN_FIELDS, { jenis: "Baru" }), keterangan: editing?.keterangan || "" }));
   const [errs, setErrs] = useState<Record<string, string>>({});
-  const [pending, setPending] = useState<{ file: File; label: string }[]>([]);
-  const [docLabel, setDocLabel] = useState("");
+  const [pending, setPending] = useState<PendingDoc[]>([]);
   const [busy, setBusy] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
 
+  const countByPemohon = useMemo(() => { const m = new Map<string, number>(); rows.forEach((r) => m.set(r.pemohon_id, (m.get(r.pemohon_id) || 0) + 1)); return m; }, [rows]);
+  const pickItems = useMemo(() => [...pem.rows].sort((a, b) => a.nama.localeCompare(b.nama, "id")).map((p) => pemohonPickItem(p, countByPemohon.get(p.id_pemohon) || 0)), [pem.rows, countByPemohon]);
   const lists = useMemo(() => {
-    const u = (k: SicKey) => [...new Set(rows.map((r) => String(r[k] || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "id"));
-    return { izin: u("izin"), lokasi: u("lokasi") } as Record<string, string[]>;
+    const u = (k: keyof Izin) => [...new Set(rows.map((r) => String(r[k] || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "id"));
+    return { izin: u("izin"), lokasi: u("lokasi") };
   }, [rows]);
+  const sel = pid ? pem.byId.get(pid) : undefined;
+  const others = pid ? rows.filter((r) => r.pemohon_id === pid && r.id_sicantik !== editing?.id_sicantik) : [];
+  const lastLokasi = others.find((r) => r.lokasi)?.lokasi;
+
   const set = (k: string, val: string) => setV((p) => ({ ...p, [k]: val }));
+  const findByKtp = (ktp: string) => (ktp ? pem.rows.find((p) => p.no_ktp === ktp) : undefined);
 
-  const onBlur = (f: Field) => {
-    if (f.k === "no_ktp" && !editing) {
-      const ktp = v.no_ktp.trim();
-      const ex = ktp && rows.find((r) => r.no_ktp === ktp);
-      if (ex) {
-        setV((p) => ({ ...p, pemohon: p.pemohon || ex.pemohon, no_hp: p.no_hp || ex.no_hp, email: p.email || ex.email, lokasi: p.lokasi || ex.lokasi }));
-        toast("Data pemohon diisi dari arsip dengan No. KTP yang sama");
-      }
-    }
-  };
-
-  const validate = () => {
-    const e: Record<string, string> = {};
-    const t = (k: string) => (v[k] || "").trim();
-    if (!t("izin")) e.izin = "Wajib diisi";
-    if (!t("jenis")) e.jenis = "Wajib dipilih";
-    if (!t("tanggal")) e.tanggal = "Wajib diisi";
-    if (!t("pemohon")) e.pemohon = "Wajib diisi";
-    if (!editing && t("id_sicantik") && byId.has(t("id_sicantik"))) e.id_sicantik = "ID sudah ada di arsip";
-    if (t("no_ktp") && !/^\d{4,20}$/.test(t("no_ktp"))) e.no_ktp = "Isi dengan angka";
-    if (t("email") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t("email"))) e.email = "Format email tidak valid";
-    if (t("tgl_penetapan") && t("tanggal") && t("tgl_penetapan") < t("tanggal")) e.tgl_penetapan = "Tidak boleh sebelum tanggal permohonan";
-    return e;
-  };
+  const reset = () => { setV(toFormValues(undefined, IZIN_FIELDS, { jenis: "Baru" })); setPending([]); setErrs({}); window.scrollTo(0, 0); };
 
   const submit = async (ev: React.FormEvent) => {
     ev.preventDefault();
-    const e = validate();
-    setErrs(e);
-    if (Object.keys(e).length) { document.getElementById("si_" + Object.keys(e)[0])?.focus(); toast("Periksa kembali isian yang ditandai"); return; }
-    const raw = { ...v };
-    if (!raw.id_sicantik.trim()) raw.id_sicantik = autoId();
-    if (!raw.lokasi_izin.trim()) raw.lokasi_izin = raw.lokasi;
-    const rec = normalizeIzin(raw);
+    const e = validateIzin(v);
+    if (!editing && v.id_sicantik.trim() && byId.has(v.id_sicantik.trim())) e.id_sicantik = "ID sudah ada di arsip";
+    let pe: Record<string, string> = {};
+    if (newMode) {
+      pe = validatePemohon(pv);
+      const ex = findByKtp(pv.no_ktp.trim());
+      if (!pe.no_ktp && ex) pe.no_ktp = `Sudah terdaftar atas nama ${ex.nama} — pilih dari daftar`;
+      else if (!pe.nama && pem.byId.has(pemohonIdOf(pv.nama, pv.no_ktp))) pe.nama = "Pemohon dengan nama ini sudah ada — pilih dari daftar";
+    }
+    const none = !newMode && !pid;
+    setErrs(e); setPerrs(pe); setPickErr(none ? "Pilih pemohon atau tambahkan yang baru" : "");
+    if (none || Object.keys(e).length || Object.keys(pe).length) {
+      const first = none ? "pickerInput" : Object.keys(pe)[0] ? "np_" + Object.keys(pe)[0] : "si_" + Object.keys(e)[0];
+      document.getElementById(first)?.focus();
+      toast("Periksa kembali isian yang ditandai");
+      return;
+    }
     try {
       setBusy("Menyimpan…");
+      let thePid = pid!;
+      if (newMode) {
+        thePid = pemohonIdOf(pv.nama, pv.no_ktp);
+        await api.insertPemohon({ id_pemohon: thePid, nama: pv.nama.trim(), no_ktp: pv.no_ktp.trim(), no_hp: pv.no_hp.trim(), email: pv.email.trim() });
+      }
+      const raw: Record<string, unknown> = { ...v, pemohon_id: thePid };
+      if (!String(raw.id_sicantik || "").trim()) raw.id_sicantik = autoId();
+      if (!String(raw.lokasi_izin || "").trim()) raw.lokasi_izin = raw.lokasi;
+      const rec = normalizeIzin(raw);
       if (editing) await api.updateIzin(editing.id_sicantik, rec);
       else await api.insertIzin(rec);
       if (pending.length) {
         setBusy("Mengunggah dokumen…");
-        for (const p of pending) await api.uploadDokumen("sicantik", rec.id_sicantik, p.file, p.label);
+        await uploadAll("sicantik", rec.id_sicantik, pending, (i) => setBusy(`Mengunggah dokumen ${i + 1}/${pending.length}…`));
       }
-      await refresh();
-      toast(editing ? "Perubahan disimpan" : "Data permohonan tersimpan ke arsip");
+      await Promise.all([refresh(), pem.refresh()]);
+      toast(editing ? "Perubahan disimpan" : `Permohonan tersimpan${pending.length ? ` dengan ${pending.length} dokumen` : ""}`);
       if (editing) nav(`/sicantik/data?id=${encodeURIComponent(rec.id_sicantik)}`);
-      else { setV(toForm()); setPending([]); setErrs({}); window.scrollTo(0, 0); }
+      else { setNewMode(false); setPid(thePid); reset(); }
     } catch (x) { toast(api.errMsg(x), 6000); }
     setBusy("");
-  };
-
-  const input = (f: Field) => {
-    const common = {
-      id: "si_" + f.k, name: f.k, value: v[f.k] ?? "", className: "inp" + (errs[f.k] ? " err" : ""), autoComplete: "off",
-      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => set(f.k, e.target.value),
-      onBlur: () => onBlur(f), "aria-invalid": !!errs[f.k] || undefined,
-    };
-    if (f.type === "select") return <select {...common}><option value="">— pilih —</option>{(f.opts || []).map((o) => <option key={o}>{o}</option>)}</select>;
-    if (f.type === "list") {
-      const opts = f.dyn ? lists[f.dyn] || [] : f.opts || [];
-      return <><input {...common} list={"sl_" + f.k} /><datalist id={"sl_" + f.k}>{opts.map((o) => <option key={o} value={o} />)}</datalist></>;
-    }
-    if (f.type === "date") return <input {...common} type="date" value={isISO(v[f.k]) ? v[f.k] : ""} />;
-    const extra = f.type === "email" ? { type: "email" } : f.type === "tel" ? { type: "tel", inputMode: "tel" as const } : f.k === "no_ktp" ? { inputMode: "numeric" as const } : {};
-    return <input {...common} {...extra} readOnly={f.k === "id_sicantik" && !!editing} />;
   };
 
   return (
     <>
       <StatusBanner kind="sicantik" />
       <div className="head">
-        <div><h1>{editing ? "Edit permohonan izin" : "Input data SiCantik"}</h1>
-          <p>{editing ? <span className="mono">ID {editing.id_sicantik}</span> : "Isian mengikuti kolom Rekap SiCantik. Kolom bertanda * wajib diisi."}</p></div>
+        <div><h1>{editing ? "Edit permohonan izin" : "Input permohonan SiCantik"}</h1>
+          <p>{editing ? <span className="mono">ID {editing.id_sicantik}</span> : "Pilih pemohon (No. KTP atau nama), lalu isi data izinnya. Satu pemohon bisa mengajukan banyak izin."}</p></div>
       </div>
       <form onSubmit={submit} noValidate>
-        {FORM.map((sec) => (
-          <div className="card form-sec" key={sec.title}>
-            <div className="card-h col"><h3>{sec.title}</h3><span>{sec.desc}</span></div>
-            <div className="fgrid">
-              {sec.fields.map((f) => (
-                <div key={f.k} className={"f" + (f.span === 2 ? " span2" : f.span === 3 ? " span3" : "")}>
-                  <label htmlFor={"si_" + f.k}>{SIC_PRETTY[f.k]}{f.req && <span className="req"> *</span>}</label>
-                  {input(f)}
-                  {errs[f.k] ? <span className="msg">{errs[f.k]}</span> : f.hint && <span className="hint">{f.hint}</span>}
+        <div className="card form-sec">
+          <div className="card-h col"><h3><span className="step-no teal">1</span>Pemohon</h3><span>Cari berdasarkan No. KTP atau nama — data pemohon tidak perlu diketik ulang</span></div>
+          {!newMode ? (
+            <>
+              <MasterPicker items={pickItems} value={pid} onSelect={(id) => { setPid(id); setPickErr(""); }}
+                onNew={(typed) => { setNewMode(true); setPid(null); setPickErr(""); setPv((o) => ({ ...o, ...(/^\d+$/.test(typed) ? { no_ktp: typed } : { nama: typed }) })); }}
+                label="No. KTP atau nama pemohon" placeholder="Ketik No. KTP atau nama pemohon…" newLabel="Tambah pemohon baru" error={pickErr} />
+              {sel && (
+                <div className="sec-switch">
+                  <span className="cell-sub">{others.length ? `Pemohon ini sudah memiliki ${others.length} permohonan lain di arsip.` : "Belum ada permohonan lain untuk pemohon ini."}</span>
+                  {lastLokasi && !v.lokasi && <button type="button" className="btn ghost sm" onClick={() => set("lokasi", lastLokasi)}>Pakai lokasi terakhir: {lastLokasi}</button>}
+                  <span className="grow" />
+                  <button type="button" className="btn sm" onClick={() => setEditPemohon(true)}><Pencil size={14} />Lihat / ubah data pemohon</button>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="sec-switch"><span className="badge ok"><UserPlus size={13} />Pemohon baru</span><span className="grow" />
+                <button type="button" className="btn sm" onClick={() => { setNewMode(false); setPerrs({}); }}><Users size={14} />Pilih dari arsip</button></div>
+              <FieldGrid fields={PEMOHON_FIELDS} v={pv} errs={perrs} set={(k, val) => setPv((o) => ({ ...o, [k]: val }))} idPrefix="np_"
+                onBlur={(f) => {
+                  if (f.k !== "no_ktp") return;
+                  const ex = findByKtp(pv.no_ktp.trim());
+                  if (ex) { setPid(ex.id_pemohon); setNewMode(false); toast("No. KTP ini sudah terdaftar — pemohon dipilih dari arsip"); }
+                }} />
+            </>
+          )}
+        </div>
+
+        {IZIN_SECTIONS.map((sec, i) => (
+          <div className="card form-sec" key={sec.title}>
+            <div className="card-h col"><h3><span className="step-no teal">{i + 2}</span>{sec.title}</h3><span>{sec.desc}</span></div>
+            <FieldGrid fields={sec.fields.map((f) => (f.k === "id_sicantik" && editing ? { ...f, readOnly: true } : f))} v={v} errs={errs} set={set} lists={lists} idPrefix="si_" />
           </div>
         ))}
+
         <div className="card form-sec">
-          <div className="card-h col"><h3>Arsip dokumen</h3><span>PDF atau gambar (JPG/PNG/WEBP), maks. 20 MB per file</span></div>
+          <div className="card-h col"><h3><span className="step-no teal">{IZIN_SECTIONS.length + 2}</span>Arsip dokumen</h3><span>Lampirkan sebanyak yang diperlukan; beri jenis dokumen pada setiap file</span></div>
           <div className="fgrid">
             <div className="f span3">
-              <label htmlFor="si_keterangan">{SIC_PRETTY.keterangan}</label>
+              <label htmlFor="si_keterangan">Tautan / keterangan arsip</label>
               <input id="si_keterangan" className="inp" value={v.keterangan} onChange={(e) => set("keterangan", e.target.value)} placeholder="Opsional: tautan Google Drive, nomor box/rak arsip fisik, atau catatan" />
             </div>
             <div className="f span3">
-              {editing?.sicantik_dokumen?.length ? <div className="docs">{editing.sicantik_dokumen.map((d) => <div className="doc-item" key={d.id}><FileText size={16} className="doc-ico" /><span className="nm">{d.label && <b>{d.label} — </b>}{d.nama_file}</span><span className="cell-sub">tersimpan</span></div>)}</div> : null}
-              <div className="upload-row">
-                <input className="inp" placeholder="Jenis dokumen (mis. Surat Izin, STR, KTP, Rekomendasi)" value={docLabel} onChange={(e) => setDocLabel(e.target.value)} />
-                <button type="button" className="btn" onClick={() => fileRef.current?.click()}><Paperclip size={16} />Pilih file…</button>
-                <input ref={fileRef} type="file" hidden multiple accept="application/pdf,image/jpeg,image/png,image/webp"
-                  onChange={(e) => {
-                    const fs = [...(e.target.files || [])];
-                    const big = fs.find((f) => f.size > 20 * 1024 * 1024);
-                    if (big) toast(`${big.name} melebihi 20 MB`);
-                    setPending((p) => [...p, ...fs.filter((f) => f.size <= 20 * 1024 * 1024).map((file) => ({ file, label: docLabel.trim() }))]);
-                    setDocLabel(""); e.target.value = "";
-                  }} />
-              </div>
-              {pending.length > 0 && <div className="docs">{pending.map((p, i) => (
-                <div className="doc-item pending" key={i}><FileText size={16} className="doc-ico" /><span className="nm">{p.label && <b>{p.label} — </b>}{p.file.name}</span><span className="cell-sub">akan diunggah</span>
-                  <button type="button" className="icon-btn" onClick={() => setPending(pending.filter((_, j) => j !== i))} aria-label="Batalkan file"><X size={15} /></button></div>
-              ))}</div>}
+              {editing?.sicantik_dokumen?.length ? (
+                <div className="docs saved">{editing.sicantik_dokumen.map((d) => <div className="doc-item" key={d.id}><FileText size={16} className="doc-ico" /><span className="nm">{d.label && <span className="doc-tag">{d.label}</span>}{d.nama_file}</span><span className="cell-sub">tersimpan</span></div>)}</div>
+              ) : null}
+              <DocUploader pending={pending} onChange={setPending} labels={LABELS_SICANTIK} onReject={(m) => toast(m, 6000)} />
             </div>
           </div>
         </div>
         <div className="form-actions">
-          <button type="button" className="btn" onClick={() => (editing ? nav(-1) : (setV(toForm()), setErrs({}), setPending([])))}>{editing ? "Batal" : "Kosongkan"}</button>
+          <button type="button" className="btn" onClick={() => (editing ? nav(-1) : reset())}>{editing ? "Batal" : "Kosongkan"}</button>
           <button className="btn primary" disabled={!!busy}>{busy ? <Loader2 size={16} className="spin-ico" /> : <Save size={16} />}{busy || (editing ? "Simpan perubahan" : "Simpan ke arsip")}</button>
         </div>
       </form>
+      {editPemohon && pid && <PemohonModal id={pid} startEdit onClose={() => setEditPemohon(false)} />}
     </>
   );
 }

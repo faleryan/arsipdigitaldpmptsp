@@ -71,7 +71,8 @@ export function buildRows(P: ParsedSheet, cleanPlaceholders: boolean) {
     const rec = normalizeRecord(raw, { cleanPlaceholders });
     let problem = "";
     if (!rec.id_proyek) problem = "Id Proyek kosong";
-    else if (!rec.nama_perusahaan && !rec.nama_proyek) problem = "Nama kosong";
+    else if (!rec.nib) problem = "NIB kosong";
+    else if (!rec.nama_perusahaan) problem = "Nama pelaku usaha kosong";
     else if (ids.has(rec.id_proyek)) problem = `Duplikat baris ${ids.get(rec.id_proyek)}`;
     if (!problem) ids.set(rec.id_proyek, i + 1);
     const dateWarn = (raw.tgl_pengajuan != null && raw.tgl_pengajuan !== "" && !rec.tgl_pengajuan) ||
@@ -178,7 +179,8 @@ export function buildIzinRows(P: ParsedSheet) {
     const rec = normalizeIzin(raw);
     let problem = "";
     if (!rec.id_sicantik) problem = "ID kosong";
-    else if (!rec.izin && !rec.pemohon) problem = "Izin & pemohon kosong";
+    else if (!rec.pemohon) problem = "Nama pemohon kosong";
+    else if (!rec.izin) problem = "Jenis izin kosong";
     else if (ids.has(rec.id_sicantik)) problem = `Duplikat baris ${ids.get(rec.id_sicantik)}`;
     if (!problem) ids.set(rec.id_sicantik, i + 1);
     const isDash = (v: unknown) => v == null || /^\s*[-–—]*\s*$/.test(String(v));
@@ -240,7 +242,7 @@ export function exportIzinReport(rows: Izin[], scope: string, instansi: string) 
     ["LAPORAN PERMOHONAN IZIN SICANTIK"], [instansi], ["Cakupan", scope], ["Dicetak", new Date().toLocaleString("id-ID")], [],
     ["Indikator", "Nilai"], ["Jumlah permohonan", rows.length], ["Sudah ditetapkan", all?.terbit || 0], ["Belum ditetapkan", rows.length - (all?.terbit || 0)],
     ["Permohonan baru", all?.baru || 0], ["Perpanjangan", all?.perpanjangan || 0], ["Perubahan", all?.perubahan || 0], ["Pencabutan", all?.pencabutan || 0],
-    ["Pemohon unik", new Set(rows.map((r) => r.no_ktp || r.pemohon.toLowerCase())).size],
+    ["Pemohon unik", new Set(rows.map((r) => r.pemohon_id)).size],
     ["Rata-rata lama proses (hari)", avg == null ? "-" : Math.round(avg * 10) / 10],
   ]);
   ws0["!cols"] = [{ wch: 32 }, { wch: 40 }];

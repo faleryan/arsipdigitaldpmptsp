@@ -17,7 +17,7 @@ const SECTIONS: [string, SicKey[]][] = [
 ];
 
 export function IzinDetail({ id, onClose }: { id: string; onClose: () => void }) {
-  const { byId, refresh } = useSicantik();
+  const { byId, rows, refresh } = useSicantik();
   const { canWrite } = useAuth();
   const { toast, confirm } = useUI();
   const nav = useNavigate();
@@ -25,6 +25,7 @@ export function IzinDetail({ id, onClose }: { id: string; onClose: () => void })
   const r = byId.get(id);
   if (!r) return null;
   const docs = r.sicantik_dokumen || [];
+  const nSama = rows.filter((x) => x.pemohon_id === r.pemohon_id).length;
   const status = statusOf(r);
   const lama = lamaProses(r);
 
@@ -50,7 +51,9 @@ export function IzinDetail({ id, onClose }: { id: string; onClose: () => void })
       <div className="modal-b">
         {SECTIONS.map(([title, keys]) => (
           <section key={title}>
-            <div className="dsec">{title}</div>
+            <div className="dsec">{title}
+              {title === "Pemohon" && <button className="link small dsec-link" onClick={() => { onClose(); nav(`/sicantik/pemohon?id=${encodeURIComponent(r.pemohon_id)}`); }}>Lihat pemohon · {nSama} permohonan →</button>}
+            </div>
             <dl className="dl">
               {keys.map((k) => {
                 let val = String(r[k] ?? "");

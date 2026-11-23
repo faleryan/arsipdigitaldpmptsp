@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Download, FileText, Link2, PlusCircle, Search, Trash2, X } from "lucide-react";
-import { useData } from "../context/DataContext";
+import { useData, usePelaku } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 import { useUI } from "../context/UIContext";
 import { RISIKO, RISIKO_COLOR, SKALA, type Proyek } from "../lib/columns";
@@ -16,6 +16,7 @@ type SortKey = "id_proyek" | "nama_perusahaan" | "nama_proyek" | "kec_usaha" | "
 
 export default function DataArsip() {
   const { rows: all, loaded, refresh } = useData();
+  const pelakuStore = usePelaku();
   const { canWrite, isAdmin } = useAuth();
   const { toast, confirm } = useUI();
   const [params, setParams] = useSearchParams();
@@ -28,6 +29,7 @@ export default function DataArsip() {
   const openId = params.get("id");
   const setOpen = (id: string | null) => { const p = new URLSearchParams(params); if (id) p.set("id", id); else p.delete("id"); setParams(p, { replace: !id }); };
 
+  const perNib = useMemo(() => { const m = new Map<string, number>(); all.forEach((r) => m.set(r.nib, (m.get(r.nib) || 0) + 1)); return m; }, [all]);
   const kecs = useMemo(() => [...new Set(all.map((r) => kecLabel(r.kec_usaha)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "id")), [all]);
   const sektors = useMemo(() => [...new Set(all.map((r) => r.sektor).filter(Boolean))].sort((a, b) => a.localeCompare(b, "id")), [all]);
   const years = useMemo(() => [...new Set(all.map(yearOf).filter(Boolean))].sort().reverse(), [all]);
@@ -76,9 +78,9 @@ export default function DataArsip() {
     try { (await import("../lib/excel")).exportData(rows); } catch (e) { toast("Gagal export: " + (e as Error).message); }
   };
   const wipeAll = async () => {
-    if (!(await confirm({ title: "Kosongkan semua data?", body: <>Seluruh <b>{fmtInt(all.length)}</b> data proyek beserta file dokumennya akan dihapus permanen.</>, ok: "Hapus semua", danger: true, typeWord: "HAPUS" }))) return;
-    setWipe({ done: 0, total: all.length });
-    try { await api.deleteAll(all, (done, total) => setWipe({ done, total })); toast("Semua data dihapus"); }
+    if (!(await confirm({ title: "Kosongkan semua data?", body: <>Seluruh <b>{fmtInt(all.length)}</b> proyek, <b>{fmtInt(pelakuStore.rows.length)}</b> pelaku usaha, beserta file dokumennya akan dihapus permanen.</>, ok: "Hapus semua", danger: true, typeWord: "HAPUS" }))) return;
+    setWipe({ done: 0, total: all.length + pelakuStore.rows.length });
+    try { await api.deleteAllOss(all, pelakuStore.rows, (done, total) => setWipe({ done, total })); toast("Semua data OSS dihapus"); }
     catch (e) { toast(api.errMsg(e), 5000); }
     setWipe(null);
     refresh();
@@ -128,7 +130,7 @@ export default function DataArsip() {
                   {pageRows.map((r) => (
                     <tr key={r.id_proyek} className="clk" tabIndex={0} onClick={() => setOpen(r.id_proyek)} onKeyDown={(e) => e.key === "Enter" && setOpen(r.id_proyek)}>
                       <td className="nowrap"><span className="mono sm">{r.id_proyek}</span><div className="cell-sub">{r.jenis_proyek}</div></td>
-                      <td><div className="cell-main">{r.nama_perusahaan}</div><div className="cell-sub mono">NIB {r.nib}</div></td>
+                      <td><div className="cell-main">{r.nama_perusahaan}</div><div className="cell-sub mono">NIB {r.nib}{(perNib.get(r.nib) || 0) > 1 && <span className="multi"> · {perNib.get(r.nib)} proyek</span>}</div></td>
                       <td><div>{r.nama_proyek}</div>{(r.kbli || r.judul_kbli) && <div className="cell-sub"><span className="mono">{r.kbli}</span> · {r.judul_kbli}</div>}</td>
                       <td>{kecLabel(r.kec_usaha)}<div className="cell-sub">{r.kel_usaha}</div></td>
                       <td>{(r.skala_usaha || "").replace("Usaha ", "")}</td>

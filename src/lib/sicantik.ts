@@ -3,8 +3,29 @@ import type { Dokumen } from "./columns";
 import { norm } from "./columns";
 import { isISO, parseDate } from "./format";
 
+/** Data induk pemohon (satu pemohon → banyak permohonan izin) */
+export interface Pemohon {
+  id_pemohon: string;
+  nama: string;
+  no_ktp: string;
+  no_hp: string;
+  email: string;
+  created_at?: string;
+  updated_at?: string;
+}
+/** id pemohon: No. KTP bila ≥ 8 digit, selain itu "NM-" + nama (sama dengan aturan migrasi di schema.sql) */
+export function pemohonIdOf(nama: string, ktp: string): string {
+  const k = (ktp || "").trim();
+  if (/^\d{8,}$/.test(k)) return k;
+  const slug = (nama || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return "NM-" + (slug || "tanpa-nama");
+}
+export const IZIN_KEYS = ["id_sicantik", "pemohon_id", "izin", "nomor_izin", "jenis", "tanggal", "lokasi", "no_permohonan", "tgl_penetapan", "lokasi_izin", "keterangan"] as const;
+export const toPemohon = (r: Izin): Pemohon => ({ id_pemohon: r.pemohon_id || pemohonIdOf(r.pemohon, r.no_ktp), nama: r.pemohon, no_ktp: r.no_ktp, no_hp: r.no_hp, email: r.email });
+
 export interface Izin {
   id_sicantik: string;
+  pemohon_id: string;
   izin: string;
   nomor_izin: string;
   jenis: string;
@@ -88,6 +109,7 @@ export function normalizeIzin(raw: Record<string, unknown>): Izin {
   const dv = (v: unknown) => (typeof v === "string" ? blank(v) || null : v);
   r.tanggal = parseDate(dv(raw.tanggal));
   r.tgl_penetapan = parseDate(dv(raw.tgl_penetapan));
+  r.pemohon_id = (raw.pemohon_id as string) || pemohonIdOf(r.pemohon as string, r.no_ktp as string);
   return r as unknown as Izin;
 }
 
