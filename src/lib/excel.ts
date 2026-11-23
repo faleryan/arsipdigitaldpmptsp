@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { COLS, HEADER_MAP, LABEL, norm, PLACEHOLDERS, RISIKO, SKALA, type Proyek } from "./columns";
-import { SIC_COLS, SIC_HEADER_MAP, normalizeIzin, izinShort, kategoriIzin, groupIzin, avgLama, statusOf, lokasiKey, type Izin } from "./sicantik";
+import { katIzin, normKode, tingkatOf, type Kbli } from "./master";
+import { SIC_COLS, SIC_HEADER_MAP, normalizeIzin, izinShort, groupIzin, avgLama, statusOf, lokasiKey, type Izin } from "./sicantik";
 import { fmtDateLong, fmtDateSlash, fmtNum, hasArsip, isISO, kecLabel, normalizeRecord, pad2 } from "./format";
 import { groupBy } from "./stats";
 
@@ -257,7 +258,7 @@ export function exportIzinReport(rows: Izin[], scope: string, instansi: string) 
     return ws;
   };
   XLSX.utils.book_append_sheet(wb, rekap("Jenis izin", groupIzin(rows, (r) => r.izin, (r) => izinShort(r.izin))), "Per Jenis Izin");
-  XLSX.utils.book_append_sheet(wb, rekap("Kategori", groupIzin(rows, (r) => kategoriIzin(r.izin))), "Per Kategori");
+  XLSX.utils.book_append_sheet(wb, rekap("Kategori", groupIzin(rows, (r) => katIzin(r))), "Per Kategori");
   const bulan = groupIzin(rows, (r) => (isISO(r.tanggal) ? r.tanggal.slice(0, 7) : "")).sort((a, b) => a.key.localeCompare(b.key));
   const wsb = rekap("Bulan permohonan", bulan);
   XLSX.utils.book_append_sheet(wb, wsb, "Per Bulan");
@@ -266,4 +267,46 @@ export function exportIzinReport(rows: Izin[], scope: string, instansi: string) 
   XLSX.utils.book_append_sheet(wb, sheetFromIzin(pending), "Belum Ditetapkan");
   XLSX.utils.book_append_sheet(wb, sheetFromIzin(rows), "Data");
   save(wb, `Laporan_SiCantik_${stamp()}.xlsx`);
+}
+
+/* ================= Master KBLI ================= */
+const KBLI_HEADERS: Record<string, string> = {
+  kode: "kode", kodekbli: "kode", kbli: "kode", tingkat: "tingkat", level: "tingkat", judul: "judul", judulkbli: "judul", nama: "judul",
+  uraian: "uraian", deskripsi: "uraian", keterangan: "uraian", kategori: "kategori",
+};
+/** Membaca file master KBLI (kolom: kode, tingkat, judul, uraian, kategori) */
+export async function readKbliFile(file: File): Promise<{ rows: Kbli[]; bad: number; versi: string }> {
+  const buf = await file.arrayBuffer();
+  const wb = /\.csv$/i.test(file.name) ? XLSX.read(new TextDecoder().decode(buf), { type: "string", raw: true }) : XLSX.read(buf, { type: "array" });
+  const aoa = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null, blankrows: false });
+  const hr = aoa.findIndex((r, i) => i < 10 && (r || []).some((h) => KBLI_HEADERS[norm(h)] === "kode") && (r || []).some((h) => KBLI_HEADERS[norm(h)] === "judul"));
+  if (hr < 0) throw new Error("Tidak menemukan kolom “kode” dan “judul”. Format yang didukung: kode, tingkat, judul, uraian, kategori.");
+  const map = (aoa[hr] || []).map((h) => KBLI_HEADERS[norm(h)]);
+  const m = file.name.match(/(19|20)\d{2}/);
+  const versi = m ? m[0] : "2025";
+  const rows: Kbli[] = [];
+  let bad = 0, kategoriNow = "";
+  const seen = new Set<string>();
+  for (let i = hr + 1; i < aoa.length; i++) {
+    const raw: Record<string, unknown> = {};
+    map.forEach((k, j) => { if (k && raw[k] == null) raw[k] = aoa[i]?.[j]; });
+    let tingkat = String(raw.tingkat ?? "").trim();
+    const kodeRaw = normKode(raw.kode, tingkat);
+    if (!tingkat) tingkat = tingkatOf(kodeRaw);
+    const kode = normKode(kodeRaw, tingkat);
+    const judul = String(raw.judul ?? "").trim();
+    if (!kode || !judul || seen.has(kode)) { bad++; continue; }
+    seen.add(kode);
+    if (tingkat === "Kategori") kategoriNow = kode;
+    const kategori = String(raw.kategori ?? "").trim().toUpperCase() || kategoriNow;
+    rows.push({ versi, kode, tingkat, judul, uraian: String(raw.uraian ?? "").trim(), kategori, aktif: true });
+  }
+  return { rows, bad, versi };
+}
+export function exportKbliTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([["kode", "tingkat", "judul", "uraian", "kategori"], ["G", "Kategori", "PERDAGANGAN BESAR DAN ECERAN", "", "G"], ["47211", "Kelompok", "PERDAGANGAN ECERAN PADI DAN PALAWIJA", "Kelompok ini mencakup …", "G"]]);
+  ws["!cols"] = [{ wch: 8 }, { wch: 16 }, { wch: 50 }, { wch: 60 }, { wch: 10 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "KBLI");
+  save(wb, "Template_Master_KBLI.xlsx");
 }

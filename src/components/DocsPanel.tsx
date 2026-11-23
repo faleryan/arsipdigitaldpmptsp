@@ -18,8 +18,8 @@ export async function uploadAll(kind: api.DocKind, id: string, pending: PendingD
 }
 
 /** Daftar dokumen arsip + unggah banyak dokumen, dipakai OSS & SiCantik */
-export function DocsPanel({ kind, id, docs, note, canWrite, onChanged }: {
-  kind: api.DocKind; id: string; docs: Dokumen[]; note?: string; canWrite: boolean; onChanged: () => Promise<void>;
+export function DocsPanel({ kind, id, docs, note, canWrite, onChanged, extraLabels = [] }: {
+  kind: api.DocKind; id: string; docs: Dokumen[]; note?: string; canWrite: boolean; onChanged: () => Promise<void>; extraLabels?: string[];
 }) {
   const { toast, confirm } = useUI();
   const [pending, setPending] = useState<PendingDoc[]>([]);
@@ -62,7 +62,7 @@ export function DocsPanel({ kind, id, docs, note, canWrite, onChanged }: {
       </div>
       {canWrite && (
         <div className="docs-add">
-          <DocUploader pending={pending} onChange={setPending} labels={kind === "oss" ? LABELS_OSS : LABELS_SICANTIK} onReject={(m) => toast(m, 6000)} compact />
+          <DocUploader pending={pending} onChange={setPending} labels={[...extraLabels, ...(kind === "oss" ? LABELS_OSS : LABELS_SICANTIK).filter((l) => !extraLabels.includes(l))]} onReject={(m) => toast(m, 6000)} compact />
           {pending.length > 0 && (
             <div className="row-gap end">
               <button className="btn ghost sm" disabled={busy !== null} onClick={() => setPending([])}>Batal</button>

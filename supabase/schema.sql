@@ -1,10 +1,11 @@
 -- =====================================================================
---  ARSIP DIGITAL OSS & SICANTIK — Skema database Supabase (versi 3)
+--  ARSIP DIGITAL OSS & SICANTIK — Skema database Supabase (versi 4)
 --  Jalankan seluruh isi file ini di Supabase: SQL Editor > New query > Run
 --
 --  • Instalasi baru  : langsung jalankan.
 --  • Sudah pakai versi sebelumnya: jalankan juga. Data lama dipindahkan
 --    otomatis ke tabel Pelaku Usaha & Pemohon (tidak ada data yang hilang).
+--  Versi 4 menambah Master KBLI & Master Jenis Izin.
 --  Aman dijalankan berulang kali.
 -- =====================================================================
 
@@ -257,6 +258,75 @@ create table if not exists public.sicantik_dokumen (
 create index if not exists sicantik_dokumen_idx on public.sicantik_dokumen (id_sicantik);
 
 -- =====================================================================
+--  MASTER DATA
+-- =====================================================================
+
+-- ---------- 7. Master KBLI (per versi, mis. 2025 / 2020) ----------
+--  Tidak dikunci ke oss_proyek karena proyek lama bisa memakai KBLI versi sebelumnya.
+create table if not exists public.master_kbli (
+  versi       text not null default '2025',
+  kode        text not null,
+  tingkat     text not null default '',   -- Kategori / Golongan Pokok / Golongan / Subgolongan / Kelompok
+  judul       text not null default '',
+  uraian      text not null default '',
+  kategori    text not null default '',   -- huruf kategori A–V
+  aktif       boolean not null default true,
+  created_at  timestamptz not null default now(),
+  created_by  uuid references auth.users(id) on delete set null,
+  updated_at  timestamptz not null default now(),
+  updated_by  uuid references auth.users(id) on delete set null,
+  primary key (versi, kode)
+);
+create index if not exists master_kbli_kode_idx on public.master_kbli (kode);
+drop trigger if exists master_kbli_touch on public.master_kbli;
+create trigger master_kbli_touch before insert or update on public.master_kbli
+  for each row execute function public.touch_updated_at();
+
+-- ---------- 8. Master Jenis Izin SiCantik ----------
+create table if not exists public.master_jenis_izin (
+  nama          text primary key,               -- nama izin persis seperti di SiCantik
+  singkatan     text not null default '',       -- mis. SIP-PV
+  kategori      text not null default '',       -- mis. Izin Praktik Tenaga Kesehatan
+  persyaratan   text not null default '',       -- satu persyaratan per baris
+  lama_layanan  integer,                        -- standar waktu layanan (hari)
+  masa_berlaku  text not null default '',
+  keterangan    text not null default '',
+  aktif         boolean not null default true,
+  created_at    timestamptz not null default now(),
+  created_by    uuid references auth.users(id) on delete set null,
+  updated_at    timestamptz not null default now(),
+  updated_by    uuid references auth.users(id) on delete set null
+);
+drop trigger if exists master_jenis_izin_touch on public.master_jenis_izin;
+create trigger master_jenis_izin_touch before insert or update on public.master_jenis_izin
+  for each row execute function public.touch_updated_at();
+
+-- Isi awal dari jenis izin yang sudah ada di data permohonan, lalu hubungkan
+insert into public.master_jenis_izin (nama, singkatan, kategori)
+select distinct izin,
+  coalesce(substring(izin from '\(([A-Z][A-Za-z]*(?:-[A-Za-z]+)*)\)'), ''),
+  case
+    when izin ~* 'praktik' then 'Izin Praktik Tenaga Kesehatan'
+    when izin ~* 'kkpr|pemanfaatan ruang' then 'Tata Ruang (KKPR/PKKPR)'
+    when izin ~* 'paud|pendidikan' then 'Pendidikan (PAUD)'
+    when izin ~* 'kekayaan daerah|ipkd' then 'Pemanfaatan Kekayaan Daerah'
+    when izin ~* 'penelitian' then 'Penelitian'
+    when izin ~* 'sosial' then 'Kesejahteraan Sosial'
+    else 'Lainnya'
+  end
+from public.sicantik_izin
+where izin <> ''
+on conflict (nama) do nothing;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'sicantik_izin_izin_fkey') then
+    alter table public.sicantik_izin add constraint sicantik_izin_izin_fkey
+      foreign key (izin) references public.master_jenis_izin(nama) on update cascade on delete restrict;
+  end if;
+end $$;
+
+-- =====================================================================
 --  KEAMANAN (Row Level Security)
 --  admin & operator: baca + tulis · viewer: baca · pending: tidak ada akses
 -- =====================================================================
@@ -289,6 +359,23 @@ begin
     execute format('create policy "data: tulis" on public.%I for all to authenticated using (public.app_role() in (''admin'',''operator'')) with check (public.app_role() in (''admin'',''operator''))', t);
   end loop;
 end $$;
+
+-- Master data: semua peran membaca; KBLI hanya admin yang mengubah;
+-- jenis izin boleh ditambah operator (otomatis saat import), diubah/dihapus admin
+alter table public.master_kbli       enable row level security;
+alter table public.master_jenis_izin enable row level security;
+drop policy if exists "master: baca" on public.master_kbli;
+create policy "master: baca" on public.master_kbli for select to authenticated using (public.app_role() in ('admin','operator','viewer'));
+drop policy if exists "master: admin" on public.master_kbli;
+create policy "master: admin" on public.master_kbli for all to authenticated using (public.app_role() = 'admin') with check (public.app_role() = 'admin');
+drop policy if exists "master: baca" on public.master_jenis_izin;
+create policy "master: baca" on public.master_jenis_izin for select to authenticated using (public.app_role() in ('admin','operator','viewer'));
+drop policy if exists "master: tambah" on public.master_jenis_izin;
+create policy "master: tambah" on public.master_jenis_izin for insert to authenticated with check (public.app_role() in ('admin','operator'));
+drop policy if exists "master: ubah" on public.master_jenis_izin;
+create policy "master: ubah" on public.master_jenis_izin for update to authenticated using (public.app_role() = 'admin') with check (public.app_role() = 'admin');
+drop policy if exists "master: hapus" on public.master_jenis_izin;
+create policy "master: hapus" on public.master_jenis_izin for delete to authenticated using (public.app_role() = 'admin');
 
 -- Bersihkan nama kebijakan versi lama
 drop policy if exists "proyek: baca" on public.oss_proyek;
@@ -324,7 +411,7 @@ create policy "arsip: hapus" on storage.objects
 do $$
 declare t text;
 begin
-  foreach t in array array['pelaku_usaha','oss_proyek','oss_dokumen','sicantik_pemohon','sicantik_izin','sicantik_dokumen'] loop
+  foreach t in array array['pelaku_usaha','oss_proyek','oss_dokumen','sicantik_pemohon','sicantik_izin','sicantik_dokumen','master_kbli','master_jenis_izin'] loop
     begin
       execute format('alter publication supabase_realtime add table public.%I', t);
     exception when duplicate_object then null;

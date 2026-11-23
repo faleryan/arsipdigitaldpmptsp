@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { FileText, Loader2, Pencil, Save, UserPlus, Users } from "lucide-react";
-import { useData, usePelaku } from "../context/DataContext";
+import { useData, useKbli, usePelaku } from "../context/DataContext";
 import { useUI } from "../context/UIContext";
 import type { Proyek } from "../lib/columns";
 import { fmtInt, normalizeRecord, parseNum } from "../lib/format";
@@ -14,6 +14,8 @@ import { MasterPicker } from "../components/MasterPicker";
 import { DocUploader, LABELS_OSS, type PendingDoc } from "../components/DocUploader";
 import { uploadAll } from "../components/DocsPanel";
 import { PelakuModal } from "../components/PelakuModal";
+import { KbliInput } from "../components/KbliInput";
+import { titleCase } from "../lib/master";
 
 const PROYEK_FIELDS = PROYEK_SECTIONS.flatMap((s) => s.fields);
 
@@ -32,6 +34,7 @@ export default function InputData() {
 function Form({ editing, initialNib }: { editing?: Proyek; initialNib: string | null }) {
   const { rows, byId, refresh } = useData();
   const pel = usePelaku();
+  const kbli = useKbli();
   const { toast } = useUI();
   const nav = useNavigate();
 
@@ -67,7 +70,8 @@ function Form({ editing, initialNib }: { editing?: Proyek; initialNib: string | 
   const onBlur = (f: FieldDef) => {
     if (f.k === "kbli") {
       const m = kbliMap[v.kbli.trim()];
-      if (m) setV((p) => ({ ...p, judul_kbli: p.judul_kbli || m.judul, sektor: p.sektor || m.sektor }));
+      const mk = kbli.index.get(v.kbli.trim());
+      setV((p) => ({ ...p, judul_kbli: p.judul_kbli || (mk ? titleCase(mk.judul) : m?.judul || ""), sektor: p.sektor || m?.sektor || "" }));
     }
     if (f.type === "money") { const n = parseNum(v[f.k]); if (n != null) set(f.k, fmtInt(n)); }
   };
@@ -158,7 +162,14 @@ function Form({ editing, initialNib }: { editing?: Proyek; initialNib: string | 
         {PROYEK_SECTIONS.map((sec, i) => (
           <div className="card form-sec" key={sec.title}>
             <div className="card-h col"><h3><span className="step-no">{i + 2}</span>{sec.title}</h3><span>{sec.desc}</span></div>
-            <FieldGrid fields={sec.fields.map((f) => (f.k === "id_proyek" && editing ? { ...f, readOnly: true } : f))} v={v} errs={errs} set={set} onBlur={onBlur} lists={lists} />
+            <FieldGrid fields={sec.fields.map((f) => (f.k === "id_proyek" && editing ? { ...f, readOnly: true } : f))} v={v} errs={errs} set={set} onBlur={onBlur} lists={lists}
+              custom={{
+                kbli: (id) => (
+                  <KbliInput id={id} value={v.kbli} index={kbli.index} rows={kbli.rows} err={!!errs.kbli}
+                    onChange={(x) => set("kbli", x)}
+                    onPick={(k) => setV((p) => ({ ...p, kbli: k.kode, judul_kbli: titleCase(k.judul), sektor: p.sektor || kbliMap[k.kode]?.sektor || "" }))} />
+                ),
+              }} />
           </div>
         ))}
 

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { katIzin } from "../../lib/master";
 import { Link } from "react-router-dom";
 import { CheckCircle2, Clock, Download, FileBadge, FolderCheck, Hourglass, Users } from "lucide-react";
 import { useSicantik } from "../../context/DataContext";
@@ -10,7 +11,7 @@ import { StatusBanner } from "../../components/StatusBanner";
 import { NAMA_INSTANSI } from "../../lib/columns";
 import { BULAN, BULAN_S, fmtInt, isISO, pad2 } from "../../lib/format";
 import {
-  avgLama, groupIzin, izinShort, JENIS_COLOR, JENIS_PERMOHONAN, kategoriIzin, lokasiKey, STATUS, STATUS_COLOR, statusOf, type Izin,
+  avgLama, groupIzin, lamaProses, izinShort, JENIS_COLOR, JENIS_PERMOHONAN, lokasiKey, STATUS, STATUS_COLOR, statusOf, type Izin,
 } from "../../lib/sicantik";
 import type { MonthPoint } from "../../lib/stats";
 
@@ -42,14 +43,19 @@ export default function SicantikDashboard() {
   const [kat, setKat] = useState("all");
 
   const years = useMemo(() => [...new Set(all.map(yearOfIzin).filter(Boolean))].sort().reverse(), [all]);
-  const kats = useMemo(() => [...new Set(all.map((r) => kategoriIzin(r.izin)))].sort(), [all]);
+  const kats = useMemo(() => [...new Set(all.map((r) => katIzin(r)))].sort(), [all]);
   const rows = useMemo(() => all.filter((r) => {
     if (year !== "all" && yearOfIzin(r) !== year) return false;
     if (month !== "all" && (!isISO(r.tanggal) || +r.tanggal.slice(5, 7) !== +month)) return false;
-    if (kat !== "all" && kategoriIzin(r.izin) !== kat) return false;
+    if (kat !== "all" && katIzin(r) !== kat) return false;
     return true;
   }), [all, year, month, kat]);
 
+  const sla = useMemo(() => {
+    let n = 0, ok = 0;
+    for (const r of rows) { const l = lamaProses(r); if (l != null && r.lama_layanan != null) { n++; if (l <= r.lama_layanan) ok++; } }
+    return { n, ok };
+  }, [rows]);
   const tot = useMemo(() => groupIzin(rows, () => "all")[0], [rows]);
   const pemohon = useMemo(() => new Set(rows.map((r) => r.pemohon_id)).size, [rows]);
   const arsip = rows.filter((r) => (r.sicantik_dokumen?.length || 0) > 0 || !!r.keterangan).length;
@@ -57,7 +63,7 @@ export default function SicantikDashboard() {
   const scope = period + (kat === "all" ? " · semua kategori izin" : ` · ${kat}`);
 
   const byIzin = useMemo(() => groupIzin(rows, (r) => r.izin, (r) => izinShort(r.izin)), [rows]);
-  const byKat = useMemo(() => groupIzin(rows, (r) => kategoriIzin(r.izin)), [rows]);
+  const byKat = useMemo(() => groupIzin(rows, (r) => katIzin(r)), [rows]);
   const byLok = useMemo(() => groupIzin(rows.filter((r) => r.lokasi), (r) => lokasiKey(r.lokasi), (r) => r.lokasi.trim()).sort((a, b) => b.total - a.total).slice(0, 10), [rows]);
   const lama = useMemo(() => byIzin.filter((g) => g.lamaN >= 3).map((g) => ({ key: g.key, label: g.label, value: avgLama(g) || 0 })), [byIzin]);
   const pending = useMemo(() => rows.filter((r) => statusOf(r) === STATUS[1]).sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal))).slice(0, 8), [rows]);
@@ -107,7 +113,7 @@ export default function SicantikDashboard() {
             </div>
             <div className="card kpi"><div className="kpi-ico"><CheckCircle2 size={18} /></div><div className="lbl">Sudah ditetapkan</div><div className="val">{fmtInt(tot?.terbit)}</div><div className="sub">{rows.length ? Math.round(((tot?.terbit || 0) / rows.length) * 100) : 0}% dari permohonan</div></div>
             <div className="card kpi"><div className="kpi-ico"><Hourglass size={18} /></div><div className="lbl">Belum ditetapkan</div><div className="val">{fmtInt(rows.length - (tot?.terbit || 0))}</div><div className="sub">nomor izin masih kosong</div></div>
-            <div className="card kpi"><div className="kpi-ico"><Clock size={18} /></div><div className="lbl">Rata-rata lama proses</div><div className="val">{fmtHari(tot ? avgLama(tot) : null)} <small className="unit">hari</small></div><div className="sub">permohonan → penetapan</div></div>
+            <div className="card kpi"><div className="kpi-ico"><Clock size={18} /></div><div className="lbl">Rata-rata lama proses</div><div className="val">{fmtHari(tot ? avgLama(tot) : null)} <small className="unit">hari</small></div><div className="sub">{sla.n ? `${Math.round((sla.ok / sla.n) * 100)}% tepat waktu sesuai standar` : "permohonan → penetapan"}</div></div>
             <div className="card kpi"><div className="kpi-ico"><Users size={18} /></div><div className="lbl">Pemohon unik</div><div className="val">{fmtInt(pemohon)}</div>
               <div className="sub"><FolderCheck size={12} style={{ verticalAlign: -2 }} /> {fmtInt(arsip)} permohonan berdokumen</div></div>
           </div>

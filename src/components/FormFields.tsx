@@ -4,9 +4,13 @@ export type FType = "text" | "select" | "list" | "date" | "num" | "money" | "ema
 export interface FieldDef { k: string; label: string; type?: FType; req?: boolean; hint?: string; span?: 2 | 3; opts?: string[]; dyn?: string; readOnly?: boolean; placeholder?: string }
 
 /** Grid isian formulir dari daftar definisi kolom */
-export function FieldGrid({ fields, v, errs, set, onBlur, lists = {}, idPrefix = "fi_" }: {
+export function FieldGrid({ fields, v, errs, set, onBlur, lists = {}, idPrefix = "fi_", custom = {}, groups = {} }: {
   fields: FieldDef[]; v: Record<string, string>; errs: Record<string, string>; set: (k: string, val: string) => void;
   onBlur?: (f: FieldDef) => void; lists?: Record<string, string[]>; idPrefix?: string;
+  /** isian khusus per kolom (mis. pemilih KBLI) */
+  custom?: Record<string, (id: string, f: FieldDef) => React.ReactNode>;
+  /** pilihan berkelompok untuk select: { kolom: { grup: [opsi] } } */
+  groups?: Record<string, Record<string, string[]>>;
 }) {
   return (
     <div className="fgrid">
@@ -18,7 +22,15 @@ export function FieldGrid({ fields, v, errs, set, onBlur, lists = {}, idPrefix =
           onBlur: () => onBlur?.(f), "aria-invalid": !!errs[f.k] || undefined, placeholder: f.placeholder,
         };
         let input: React.ReactNode;
-        if (f.type === "select") {
+        if (custom[f.k]) {
+          input = custom[f.k](id, f);
+        } else if (f.type === "select" && groups[f.k]) {
+          const g = groups[f.k];
+          const all = Object.values(g).flat();
+          input = <select {...common}><option value="">— pilih —</option>
+            {Object.entries(g).map(([label, opts]) => <optgroup key={label} label={label}>{opts.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>)}
+            {v[f.k] && !all.includes(v[f.k]) && <option>{v[f.k]}</option>}</select>;
+        } else if (f.type === "select") {
           const opts = f.opts || [];
           input = <select {...common}><option value="">— pilih —</option>{opts.map((o) => <option key={o}>{o}</option>)}{v[f.k] && !opts.includes(v[f.k]) && <option>{v[f.k]}</option>}</select>;
         } else if (f.type === "list") {

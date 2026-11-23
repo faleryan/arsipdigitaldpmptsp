@@ -44,6 +44,9 @@ export interface Izin {
   created_at?: string;
   updated_at?: string;
   sicantik_dokumen?: Dokumen[];
+  /** dari master jenis izin (diisi saat data digabung) */
+  kategori_izin?: string;
+  lama_layanan?: number | null;
 }
 export type SicKey = "id_sicantik" | "izin" | "nomor_izin" | "jenis" | "tanggal" | "pemohon" | "lokasi" | "no_permohonan" | "no_ktp" | "no_hp" | "email" | "tgl_penetapan" | "lokasi_izin" | "keterangan";
 

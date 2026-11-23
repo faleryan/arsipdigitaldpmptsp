@@ -1,13 +1,16 @@
 import { useState } from "react";
+import { katIzin } from "../lib/master";
 import { useNavigate } from "react-router-dom";
 import { Pencil, Trash2, X } from "lucide-react";
 import { Modal } from "./Modal";
 import { DocsPanel } from "./DocsPanel";
 import { useAuth } from "../context/AuthContext";
-import { useSicantik } from "../context/DataContext";
+import { useJenisIzin, useSicantik } from "../context/DataContext";
+import { persyaratanList, syaratTerpenuhi } from "../lib/master";
+import { CheckCircle2, Circle } from "lucide-react";
 import { useUI } from "../context/UIContext";
 import { fmtDateLong, maskNik } from "../lib/format";
-import { kategoriIzin, lamaProses, SIC_PRETTY, statusOf, type SicKey } from "../lib/sicantik";
+import { lamaProses, SIC_PRETTY, statusOf, type SicKey } from "../lib/sicantik";
 import * as api from "../lib/api";
 
 const SECTIONS: [string, SicKey[]][] = [
@@ -18,6 +21,7 @@ const SECTIONS: [string, SicKey[]][] = [
 
 export function IzinDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const { byId, rows, refresh } = useSicantik();
+  const jenis = useJenisIzin();
   const { canWrite } = useAuth();
   const { toast, confirm } = useUI();
   const nav = useNavigate();
@@ -28,6 +32,10 @@ export function IzinDetail({ id, onClose }: { id: string; onClose: () => void })
   const nSama = rows.filter((x) => x.pemohon_id === r.pemohon_id).length;
   const status = statusOf(r);
   const lama = lamaProses(r);
+  const j = jenis.byId.get(r.izin);
+  const sla = j?.lama_layanan ?? null;
+  const syarat = persyaratanList(j);
+  const docLabels = docs.flatMap((d) => [d.label, d.nama_file]).filter(Boolean);
 
   const remove = async () => {
     if (!(await confirm({ title: "Hapus data permohonan?", body: <>Permohonan <b>{r.pemohon}</b> ({r.izin}) beserta {docs.length} dokumennya akan dihapus. Tindakan ini tidak dapat dibatalkan.</>, ok: "Hapus", danger: true }))) return;
@@ -42,8 +50,8 @@ export function IzinDetail({ id, onClose }: { id: string; onClose: () => void })
           <p>{r.izin}</p>
           <div className="row-gap" style={{ marginTop: 6 }}>
             <span className={"badge " + (status === "Sudah ditetapkan" ? "ok" : "warn")}>{status}</span>
-            <span className="badge">{kategoriIzin(r.izin)}</span>
-            {lama != null && <span className="badge">Diproses {lama} hari</span>}
+            <span className="badge">{katIzin(r)}</span>
+            {lama != null && <span className={"badge" + (sla != null ? (lama <= sla ? " ok" : " warn") : "")} title={sla != null ? `Standar layanan ${sla} hari` : undefined}>Diproses {lama} hari{sla != null ? (lama <= sla ? " · tepat waktu" : ` · lewat ${lama - sla} hari dari standar`) : ""}</span>}
           </div>
         </div>
         <button className="icon-btn" onClick={onClose} aria-label="Tutup"><X size={18} /></button>
@@ -73,7 +81,13 @@ export function IzinDetail({ id, onClose }: { id: string; onClose: () => void })
             </dl>
           </section>
         ))}
-        <DocsPanel kind="sicantik" id={r.id_sicantik} docs={docs} note={r.keterangan} canWrite={canWrite} onChanged={refresh} />
+        <DocsPanel kind="sicantik" id={r.id_sicantik} docs={docs} note={r.keterangan} canWrite={canWrite} onChanged={refresh} extraLabels={syarat} />
+        {syarat.length > 0 && (
+          <div className="syarat-box">
+            <b>Daftar periksa persyaratan</b> — {syarat.filter((x) => syaratTerpenuhi(x, docLabels)).length} dari {syarat.length} dokumen sudah diarsipkan
+            <ul className="syarat">{syarat.map((x) => { const ok = syaratTerpenuhi(x, docLabels); return <li key={x} className={ok ? "ok" : "miss"}>{ok ? <CheckCircle2 size={15} /> : <Circle size={15} />}{x}</li>; })}</ul>
+          </div>
+        )}
         <p className="cell-sub meta">Sumber: {r.sumber === "import" ? `Import Excel${r.file_import ? ` (${r.file_import})` : ""}` : "Input manual"}{r.updated_at ? ` · Diperbarui ${new Date(r.updated_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}` : ""}</p>
       </div>
       <div className="modal-f">

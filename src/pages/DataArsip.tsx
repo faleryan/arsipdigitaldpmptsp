@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Download, FileText, Link2, PlusCircle, Search, Trash2, X } from "lucide-react";
-import { useData, usePelaku } from "../context/DataContext";
+import { useData, useKbli, usePelaku } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 import { useUI } from "../context/UIContext";
 import { RISIKO, RISIKO_COLOR, SKALA, type Proyek } from "../lib/columns";
@@ -17,11 +17,12 @@ type SortKey = "id_proyek" | "nama_perusahaan" | "nama_proyek" | "kec_usaha" | "
 export default function DataArsip() {
   const { rows: all, loaded, refresh } = useData();
   const pelakuStore = usePelaku();
+  const kb = useKbli();
   const { canWrite, isAdmin } = useAuth();
   const { toast, confirm } = useUI();
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState("");
-  const [f, setF] = useState({ kec: "all", skala: "all", risiko: "all", sektor: "all", year: "all", arsip: "all" });
+  const [f, setF] = useState({ kec: "all", skala: "all", risiko: "all", sektor: "all", year: "all", arsip: "all", katKbli: "all" });
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: "tgl_pengajuan", dir: -1 });
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(20);
@@ -42,6 +43,7 @@ export default function DataArsip() {
       if (f.risiko !== "all" && r.risiko !== f.risiko) return false;
       if (f.sektor !== "all" && r.sektor !== f.sektor) return false;
       if (f.year !== "all" && yearOf(r) !== f.year) return false;
+      if (f.katKbli !== "all" && kb.index.kategoriOf(r.kbli) !== f.katKbli) return false;
       if (f.arsip === "ada" && !hasArsip(r)) return false;
       if (f.arsip === "belum" && hasArsip(r)) return false;
       if (terms.length) {
@@ -60,7 +62,7 @@ export default function DataArsip() {
       if (sx && !sy) return -1;
       return sx.localeCompare(sy, "id") * dir;
     });
-  }, [all, q, f, sort]);
+  }, [all, q, f, sort, kb.index]);
 
   const pages = Math.max(1, Math.ceil(rows.length / size));
   useEffect(() => { if (page > pages) setPage(pages); }, [page, pages]);
@@ -108,9 +110,10 @@ export default function DataArsip() {
         <select className="inp" value={f.skala} onChange={(e) => setFilter("skala", e.target.value)} aria-label="Skala"><option value="all">Semua skala</option>{SKALA.map((k) => <option key={k}>{k}</option>)}</select>
         <select className="inp" value={f.risiko} onChange={(e) => setFilter("risiko", e.target.value)} aria-label="Risiko"><option value="all">Semua risiko</option>{RISIKO.map((k) => <option key={k}>{k}</option>)}</select>
         <select className="inp sektor" value={f.sektor} onChange={(e) => setFilter("sektor", e.target.value)} aria-label="Sektor"><option value="all">Semua sektor</option>{sektors.map((k) => <option key={k}>{k}</option>)}</select>
+        {kb.rows.length > 0 && <select className="inp" value={f.katKbli} onChange={(e) => setFilter("katKbli", e.target.value)} aria-label="Kategori KBLI"><option value="all">Semua kategori KBLI</option>{[...kb.index.kategoriJudul.keys()].sort().map((k) => <option key={k} value={k}>{kb.index.kategoriLabel(k).slice(0, 48)}</option>)}</select>}
         <select className="inp" value={f.year} onChange={(e) => setFilter("year", e.target.value)} aria-label="Tahun"><option value="all">Semua tahun</option>{years.map((k) => <option key={k}>{k}</option>)}</select>
         <select className="inp" value={f.arsip} onChange={(e) => setFilter("arsip", e.target.value)} aria-label="Status arsip"><option value="all">Semua status arsip</option><option value="ada">Sudah berdokumen</option><option value="belum">Belum berdokumen</option></select>
-        {filtered && <button className="btn ghost sm" onClick={() => { setQ(""); setF({ kec: "all", skala: "all", risiko: "all", sektor: "all", year: "all", arsip: "all" }); setPage(1); }}><X size={14} />Reset</button>}
+        {filtered && <button className="btn ghost sm" onClick={() => { setQ(""); setF({ kec: "all", skala: "all", risiko: "all", sektor: "all", year: "all", arsip: "all", katKbli: "all" }); setPage(1); }}><X size={14} />Reset</button>}
       </div>
 
       <div className="card">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Archive, Building2, Contact, FileBadge, Home, LayoutDashboard, LogOut, Moon, PlusCircle, Sun, Table2, Upload, UserCog, KeyRound } from "lucide-react";
+import { Archive, BookOpen, Building2, Contact, ListChecks, FileBadge, Home, LayoutDashboard, LogOut, Moon, PlusCircle, Sun, Table2, Upload, UserCog, KeyRound } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useData, useSicantik } from "../context/DataContext";
 import { useUI } from "../context/UIContext";
@@ -39,6 +39,9 @@ export function Layout() {
       : { to: "/sicantik/pemohon", label: "Pemohon", icon: Contact, show: true },
     { to: `${base}/input`, label: "Input Data", icon: PlusCircle, show: canWrite },
     { to: `${base}/import`, label: "Import Excel", icon: Upload, show: canWrite },
+    base === "/oss"
+      ? { to: "/oss/kbli", label: "Master KBLI", icon: BookOpen, show: true }
+      : { to: "/sicantik/jenis-izin", label: "Jenis Izin", icon: ListChecks, show: true },
   ].filter((n) => n.show);
   const sections = [
     { title: "OSS RBA", base: "/oss", items: moduleNav("/oss") },
@@ -106,7 +109,7 @@ export function Layout() {
         {current && (
           <nav className="modtabs" aria-label={`Menu ${current.title}`}>
             {current.items.map((n) => (
-              <NavLink key={n.to} to={n.to} end={n.end} className="modtab">{n.label.replace(" Arsip", "").replace(" Data", "").replace(" Excel", "").replace(" Usaha", "")}</NavLink>
+              <NavLink key={n.to} to={n.to} end={n.end} className="modtab">{n.label.replace(" Arsip", "").replace(" Data", "").replace(" Excel", "").replace(" Usaha", "").replace("Master ", "")}</NavLink>
             ))}
           </nav>
         )}

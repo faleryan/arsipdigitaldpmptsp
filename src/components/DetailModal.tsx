@@ -4,7 +4,8 @@ import { Pencil, Trash2, X } from "lucide-react";
 import { DocsPanel } from "./DocsPanel";
 import { Modal } from "./Modal";
 import { useAuth } from "../context/AuthContext";
-import { useData } from "../context/DataContext";
+import { useData, useKbli } from "../context/DataContext";
+import { titleCase } from "../lib/master";
 import { useUI } from "../context/UIContext";
 import { PRETTY, type FieldKey, type Proyek } from "../lib/columns";
 import { fmtDateLong, fmtInt, fmtNum, fmtRp, kecLabel, maskNik } from "../lib/format";
@@ -29,6 +30,7 @@ function show(r: Proyek, k: FieldKey): string {
 
 export function DetailModal({ id, onClose }: { id: string; onClose: () => void }) {
   const { byId, rows, refresh } = useData();
+  const kb = useKbli();
   const { canWrite } = useAuth();
   const { toast, confirm } = useUI();
   const nav = useNavigate();
@@ -53,6 +55,9 @@ export function DetailModal({ id, onClose }: { id: string; onClose: () => void }
         {SECTIONS.map(([title, keys]) => (
           <section key={title}>
             <div className="dsec">{title}
+              {title === "KBLI & investasi" && r.kbli && kb.rows.length > 0 && (kb.index.get(r.kbli)
+                ? <button className="link small dsec-link" onClick={() => { onClose(); nav(`/oss/kbli?kode=${encodeURIComponent(r.kbli)}`); }}>KBLI {kb.index.get(r.kbli)!.versi} · {titleCase(kb.index.kategoriLabel(kb.index.kategoriOf(r.kbli)))} · lihat uraian →</button>
+                : <span className="kbli-warn dsec-link">Kode tidak ada di Master KBLI (versi lama?)</span>)}
               {title === "Pelaku usaha" && <button className="link small dsec-link" onClick={() => { onClose(); nav(`/oss/pelaku?nib=${encodeURIComponent(r.nib)}`); }}>Lihat pelaku usaha · {nSama} proyek →</button>}
             </div>
             <dl className="dl">

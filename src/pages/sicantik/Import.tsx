@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload } from "lucide-react";
-import { usePemohon, useSicantik } from "../../context/DataContext";
+import { useJenisIzin, usePemohon, useSicantik } from "../../context/DataContext";
+import { newJenisIzin } from "../../lib/master";
 import { useUI } from "../../context/UIContext";
 import { fmtDateLong, fmtInt } from "../../lib/format";
 import { izinShort, SIC_LABEL, toPemohon, type Izin, type Pemohon } from "../../lib/sicantik";
@@ -15,6 +16,7 @@ type Stage = { kind: "pick" } | { kind: "reading" } | { kind: "error"; msg: stri
 export default function SicantikImport() {
   const { byId, refresh } = useSicantik();
   const pemohonStore = usePemohon();
+  const jenisStore = useJenisIzin();
   const { toast } = useUI();
   const [stage, setStage] = useState<Stage>({ kind: "pick" });
   const [dup, setDup] = useState<"update" | "skip">("update");
@@ -43,8 +45,9 @@ export default function SicantikImport() {
     const nNew = valid.filter((x) => !byId.has(x.rec.id_sicantik)).length;
     const pids = new Set(valid.map((x) => x.rec.pemohon_id));
     const nPemohonNew = [...pids].filter((id) => !pemohonStore.byId.has(id)).length;
-    return { total: rows.length, valid, nNew, nUpd: valid.length - nNew, nBad: rows.length - valid.length, nDate: rows.filter((x) => x.dateWarn).length, nPending: valid.filter((x) => !x.rec.nomor_izin).length, nPemohon: pids.size, nPemohonNew };
-  }, [stage, byId, pemohonStore.byId]);
+    const jenisBaru = [...new Set(valid.map((x) => x.rec.izin))].filter((n) => !jenisStore.byId.has(n));
+    return { total: rows.length, valid, nNew, nUpd: valid.length - nNew, nBad: rows.length - valid.length, nDate: rows.filter((x) => x.dateWarn).length, nPending: valid.filter((x) => !x.rec.nomor_izin).length, nPemohon: pids.size, nPemohonNew, jenisBaru };
+  }, [stage, byId, pemohonStore.byId, jenisStore.byId]);
 
   const save = async () => {
     if (stage.kind !== "preview") return;
@@ -66,8 +69,8 @@ export default function SicantikImport() {
     const nNew = list.filter((x) => !byId.has(x.rec.id_sicantik)).length;
     setProg({ done: 0, total: pmap.size + rows.length });
     try {
-      await api.importSicantik([...pmap.values()], rows, { skipExisting: dup === "skip", fileName: stage.P.fileName }, (done, total) => setProg({ done, total }));
-      await refresh();
+      await api.importSicantik([...pmap.values()], rows, { skipExisting: dup === "skip", fileName: stage.P.fileName, jenisBaru: stats.jenisBaru.map(newJenisIzin) }, (done, total) => setProg({ done, total }));
+      await Promise.all([refresh(), jenisStore.refresh()]);
       setStage({ kind: "done", nNew, nUpd: rows.length - nNew });
     } catch (e) { toast(api.errMsg(e), 6000); }
     setProg(null);
@@ -122,6 +125,7 @@ export default function SicantikImport() {
               {stage.P.missing.length > 0 && <> Kolom tidak ditemukan: <i>{stage.P.missing.map((k) => SIC_LABEL[k] || k).join(", ")}</i>.</>}
               {stage.P.unknown.length > 0 && <> Kolom diabaikan: <i>{stage.P.unknown.join(", ")}</i>.</>}
               {stats.nDate > 0 && <> {fmtInt(stats.nDate)} baris memiliki tanggal yang tidak terbaca (disimpan kosong).</>}
+              {stats.jenisBaru.length > 0 && <> <b>{fmtInt(stats.jenisBaru.length)} jenis izin baru</b> akan ditambahkan otomatis ke Master Jenis Izin.</>}
             </p>
             {stats.nUpd > 0 && (
               <div className="radio-row"><span className="muted">Data yang sudah ada:</span>

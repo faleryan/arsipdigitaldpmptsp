@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Banknote, Building2, Download, FolderCheck, Users, Briefcase } from "lucide-react";
-import { useData } from "../context/DataContext";
+import { useData, useKbli } from "../context/DataContext";
+import { titleCase } from "../lib/master";
 import { useAuth } from "../context/AuthContext";
 import { useUI } from "../context/UIContext";
 import { Columns, HBar, METRICS, SegBar } from "../components/Charts";
@@ -13,6 +14,7 @@ import { StatusBanner } from "../components/StatusBanner";
 
 export default function Dashboard() {
   const { rows: all, loaded } = useData();
+  const kb = useKbli();
   const { canWrite } = useAuth();
   const { toast } = useUI();
   const [year, setYear] = useState("all");
@@ -49,6 +51,7 @@ export default function Dashboard() {
   const pelaku = useMemo(() => groupBy(rows, (r) => r.nib, metric).sort((a, b) => b.value - a.value || b.proyek - a.proyek).slice(0, 8), [rows, metric]);
   const recap = useMemo(() => groupBy(rows, (r) => kecLabel(r.kec_usaha)).sort((a, b) => b.proyek - a.proyek), [rows]);
   const kbliMax = Math.max(1, ...kbli.map((k) => k.value));
+  const byKatKbli = useMemo(() => groupBy(rows, (r) => kb.index.kategoriLabel(kb.index.kategoriOf(r.kbli)), metric), [rows, metric, kb.index]);
 
   const download = async () => {
     try { const x = await import("../lib/excel"); x.exportReport(rows, scope, NAMA_INSTANSI); }
@@ -116,23 +119,28 @@ export default function Dashboard() {
             <div className="card"><div className="card-h"><h3>Skala usaha</h3><span>{M.label}</span></div><div className="card-b"><SegBar order={SKALA} colors={SKALA_COLOR} groups={groupBy(rows, (r) => r.skala_usaha, metric)} metric={metric} /></div></div>
           </div>
           <div className="grid2">
-            <div className="card"><div className="card-h"><h3>KL / Sektor pembina</h3><span>{M.label}</span></div><div className="card-b"><HBar items={bySektor} metric={metric} total={total} maxRows={8} /></div></div>
-            <div className="card"><div className="card-h"><h3>Jenis perusahaan</h3><span>{M.label}</span></div><div className="card-b"><HBar items={byJenis} metric={metric} total={total} maxRows={8} /></div></div>
+            <div className="card"><div className="card-h"><h3>Kategori KBLI</h3><span>{M.label}</span></div><div className="card-b">
+              {kb.rows.length ? <HBar items={byKatKbli} metric={metric} total={total} maxRows={10} /> : <div className="empty">Impor <Link to="/oss/kbli">Master KBLI</Link> untuk melihat sebaran per kategori.</div>}
+            </div></div>
+            <div className="card"><div className="card-h"><h3>KL / Sektor pembina</h3><span>{M.label}</span></div><div className="card-b"><HBar items={bySektor} metric={metric} total={total} maxRows={10} /></div></div>
           </div>
           <div className="grid2">
             <div className="card"><div className="card-h"><h3>10 KBLI teratas</h3><span>{M.label}</span></div>
               <div className="card-b tbl-wrap"><table><thead><tr><th>KBLI</th><th>Judul</th><th className="num">{M.col}</th></tr></thead><tbody>
-                {kbli.map((k) => (
-                  <tr key={k.key}><td className="mono">{k.key}</td><td>{k.sample.judul_kbli}<div className="inlinebar" style={{ width: `${(k.value / kbliMax) * 100}%` }} /></td><td className="num">{M.short(k.value)}</td></tr>
-                ))}
+                {kbli.map((k) => {
+                  const mk = kb.index.get(k.key);
+                  return <tr key={k.key}><td className="mono">{k.key}</td><td>{mk ? titleCase(mk.judul) : k.sample.judul_kbli}<div className="inlinebar" style={{ width: `${(k.value / kbliMax) * 100}%` }} /></td><td className="num">{M.short(k.value)}</td></tr>;
+                })}
               </tbody></table></div></div>
-            <div className="card"><div className="card-h"><h3>Pelaku usaha teratas</h3><span>{M.label}</span></div>
-              <div className="card-b tbl-wrap"><table><thead><tr><th>Pelaku usaha</th><th className="num">Proyek</th><th className="num">{metric === "proyek" ? "Investasi" : M.col}</th></tr></thead><tbody>
-                {pelaku.map((p) => (
-                  <tr key={p.key}><td><div className="cell-main">{p.sample.nama_perusahaan}</div><div className="cell-sub mono">NIB {p.key}</div></td><td className="num">{fmtInt(p.proyek)}</td><td className="num">{metric === "proyek" ? fmtRpShort(p.investasi) : M.short(p.value)}</td></tr>
-                ))}
-              </tbody></table></div></div>
+            <div className="card"><div className="card-h"><h3>Jenis perusahaan</h3><span>{M.label}</span></div><div className="card-b"><HBar items={byJenis} metric={metric} total={total} maxRows={8} /></div></div>
           </div>
+          <div className="card" style={{ marginBottom: 16 }}><div className="card-h"><h3>Pelaku usaha teratas</h3><span>{M.label}</span></div>
+            <div className="card-b tbl-wrap"><table><thead><tr><th>Pelaku usaha</th><th>KBLI</th><th className="num">Proyek</th><th className="num">{metric === "proyek" ? "Investasi" : M.col}</th></tr></thead><tbody>
+              {pelaku.map((p) => {
+                const ks = [...new Set(rows.filter((r) => r.nib === p.key).map((r) => r.kbli).filter(Boolean))];
+                return <tr key={p.key}><td><Link className="plain cell-main" to={`/oss/pelaku?nib=${encodeURIComponent(p.key)}`}>{p.sample.nama_perusahaan}</Link><div className="cell-sub mono">NIB {p.key}</div></td><td className="mono sm">{ks.slice(0, 5).join(", ")}{ks.length > 5 ? ` +${ks.length - 5}` : ""}</td><td className="num">{fmtInt(p.proyek)}</td><td className="num">{metric === "proyek" ? fmtRpShort(p.investasi) : M.short(p.value)}</td></tr>;
+              })}
+            </tbody></table></div></div>
           <div className="card"><div className="card-h"><h3>Rekapitulasi per kecamatan</h3><span>{scope}</span></div>
             <div className="card-b tbl-wrap"><table>
               <thead><tr><th>Kecamatan</th><th className="num">Proyek</th><th className="num">Pelaku usaha</th><th className="num">Investasi (Rp)</th><th className="num">Tenaga kerja</th><th className="num">Berdokumen</th></tr></thead>

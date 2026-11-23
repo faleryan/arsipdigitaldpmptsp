@@ -39,8 +39,8 @@ export const PROYEK_SECTIONS: { title: string; desc: string; fields: FieldDef[] 
     F("luas_tanah", { type: "num" }),
     F("satuan_tanah", { type: "list", opts: ["m2", "Ha"] }),
   ] },
-  { title: "KBLI & investasi", desc: "Judul KBLI dan sektor terisi otomatis bila KBLI pernah dipakai", fields: [
-    F("kbli", { type: "list", dyn: "kbli", hint: "5 digit" }),
+  { title: "KBLI & investasi", desc: "Ketik kode atau kata kunci — pilih dari Master KBLI, judul terisi otomatis", fields: [
+    F("kbli", { hint: "5 digit (tingkat Kelompok)" }),
     F("judul_kbli", { span: 2 }),
     F("sektor", { type: "list", dyn: "sektor", span: 2 }),
     F("investasi", { type: "money", hint: "Dalam rupiah" }),
@@ -95,7 +95,7 @@ export const PEMOHON_FIELDS: FieldDef[] = [
 ];
 export const IZIN_SECTIONS: { title: string; desc: string; fields: FieldDef[] }[] = [
   { title: "Data izin", desc: "Jenis izin, permohonan, dan penetapan", fields: [
-    S("izin", { type: "list", dyn: "izin", req: true, span: 2, hint: "Pilih dari daftar atau ketik nama izin baru" }),
+    S("izin", { type: "select", req: true, span: 2, hint: "Daftar dari Master Jenis Izin" }),
     S("jenis", { type: "select", opts: JENIS_PERMOHONAN, req: true }),
     S("tanggal", { type: "date", req: true }),
     S("no_permohonan", { hint: "Contoh: 1049/500.16.7.1.Resi/DPMPTSP/XI/2026" }),

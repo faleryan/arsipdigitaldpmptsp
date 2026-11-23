@@ -19,6 +19,20 @@ Keduanya dilengkapi dashboard laporan, input manual, import Excel, dan penyimpan
 - **Pemohon (SiCantik):** satu pemohon bisa mengajukan banyak izin. Saat input permohonan, cukup **pilih No. KTP atau nama pemohon**.
 - **Arsip dokumen:** setiap proyek/permohonan bisa dilampiri **banyak dokumen** sekaligus (seret beberapa file). Setiap file diberi jenis dokumennya, mis. NIB, PKKPR, STR, atau KTP. Jenis dokumen ditebak otomatis dari nama file dan bisa diubah.
 
+### Master data
+
+- **Master KBLI** (menu OSS RBA → *Master KBLI*): daftar KBLI berjenjang (Kategori, Golongan Pokok, Golongan, Subgolongan, Kelompok) lengkap dengan uraian, bisa dicari berdasarkan kode, judul, atau isi uraian. Admin mengimpor file KBLI (kolom `kode, tingkat, judul, uraian, kategori`, mis. `kbli-2025-lengkap.xlsx`) dan bisa menyimpan lebih dari satu versi (2025, 2020, dan seterusnya). Kegunaannya:
+  - saat input proyek, KBLI dipilih dari master dan judulnya terisi otomatis;
+  - dashboard OSS menampilkan sebaran per **kategori KBLI**, dan Data Arsip bisa difilter per kategori;
+  - detail proyek menampilkan uraian KBLI-nya;
+  - kode KBLI di arsip yang **tidak ada di master** (biasanya KBLI 2020) ditandai dan dirangkum di halaman Master KBLI.
+- **Master Jenis Izin** (menu SiCantik → *Jenis Izin*): nama izin, singkatan, kategori, **standar waktu layanan (hari)**, masa berlaku, **persyaratan dokumen**, dan keterangan/dasar hukum. Kegunaannya:
+  - jenis izin pada input permohonan dipilih dari master (dikelompokkan per kategori);
+  - persyaratan menjadi **daftar periksa dokumen** di formulir dan di detail permohonan, sekaligus pilihan jenis dokumen saat unggah;
+  - standar waktu dipakai untuk menghitung **% tepat waktu** di dashboard, detail permohonan, dan halaman Jenis Izin;
+  - mengganti nama jenis izin otomatis ikut mengganti nama izin di semua permohonannya;
+  - jenis izin baru dari file rekap otomatis ditambahkan ke master saat import.
+
 ### Menu OSS RBA (`/oss`)
 
 | Halaman | Isi |
@@ -148,6 +162,13 @@ npx vercel --prod
 - Kategori izin (Tenaga Kesehatan, Tata Ruang, PAUD, dll.) dikenali otomatis dari nama izin.
 - Pemohon dikenali dari **No. KTP** (bila berisi minimal 8 digit). Pemohon tanpa KTP yang valid dikenali dari namanya.
 
+## Mengisi master data pertama kali
+
+1. **Master KBLI**: masuk sebagai Admin, buka **OSS RBA → Master KBLI → Import Excel**, lalu pilih `kbli-2025-lengkap.xlsx`. Versi terisi otomatis dari nama file (2025). Ada 2.444 kode, prosesnya beberapa detik.
+2. **Master Jenis Izin**: setelah `schema.sql` dijalankan, jenis izin yang sudah ada di data SiCantik otomatis masuk ke master. Untuk instalasi baru, jenis izin terisi saat rekap SiCantik diimpor. Lengkapi standar waktu dan persyaratan tiap jenis izin di **SiCantik → Jenis Izin**.
+
+Master data hanya bisa diubah oleh **Admin**. Operator boleh menambah jenis izin baru (otomatis saat import).
+
 ## Memperbarui database yang sudah ada
 
 Sudah memakai versi sebelumnya? Cukup **jalankan ulang seluruh isi `supabase/schema.sql`** di SQL Editor. Skrip ini otomatis:
@@ -155,6 +176,8 @@ Sudah memakai versi sebelumnya? Cukup **jalankan ulang seluruh isi `supabase/sch
 1. membuat tabel `pelaku_usaha` dan `sicantik_pemohon`,
 2. memindahkan data pelaku usaha dan pemohon dari baris proyek/izin yang sudah ada ke tabel tersebut (satu per NIB atau pemohon),
 3. menghubungkan proyek ke pelaku usaha dan izin ke pemohon.
+
+Versi 4 juga membuat tabel `master_kbli` dan `master_jenis_izin`, lalu mengisi master jenis izin dari data permohonan yang sudah ada.
 
 Tidak ada data atau dokumen yang hilang, dan skrip aman dijalankan berulang. Proyek lama yang NIB-nya kosong diberi NIB sementara `TANPA-NIB-<Id Proyek>`, yang bisa Anda perbaiki di menu **Pelaku Usaha**.
 
@@ -173,6 +196,8 @@ src/pages/               Login, Beranda, halaman OSS (Dashboard, DataArsip, Pela
 src/pages/sicantik/      halaman SiCantik (Dashboard, Data, Pemohon, Input, Import)
 src/components/          Layout, grafik, modal detail, pemilih NIB/KTP (MasterPicker), unggah banyak dokumen (DocUploader)
 src/lib/forms.ts         definisi isian formulir & validasi
+src/lib/master.ts        Master KBLI (indeks, hierarki, kategori) & Master Jenis Izin (persyaratan, standar waktu)
+src/pages/master/        halaman Master KBLI & Master Jenis Izin
 vercel.json              agar alamat halaman (mis. /data) tidak 404 saat di-refresh
 ```
 

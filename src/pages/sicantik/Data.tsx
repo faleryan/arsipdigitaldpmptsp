@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { katIzin } from "../../lib/master";
 import { Link, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Download, FileText, Link2, PlusCircle, Search, Trash2, X } from "lucide-react";
 import { usePemohon, useSicantik } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
 import { useUI } from "../../context/UIContext";
 import { fmtDateLong, fmtInt, isISO } from "../../lib/format";
-import { izinShort, JENIS_COLOR, JENIS_PERMOHONAN, kategoriIzin, STATUS, statusOf, type Izin } from "../../lib/sicantik";
+import { izinShort, JENIS_COLOR, JENIS_PERMOHONAN, STATUS, statusOf, type Izin } from "../../lib/sicantik";
 import { IzinDetail } from "../../components/IzinDetail";
 import { Loading } from "../../components/Loading";
 import { StatusBanner } from "../../components/StatusBanner";
@@ -32,14 +33,14 @@ export default function SicantikData() {
   const setOpen = (id: string | null) => { const p = new URLSearchParams(params); if (id) p.set("id", id); else p.delete("id"); setParams(p, { replace: !id }); };
 
   const perPemohon = useMemo(() => { const m = new Map<string, number>(); all.forEach((r) => m.set(r.pemohon_id, (m.get(r.pemohon_id) || 0) + 1)); return m; }, [all]);
-  const kats = useMemo(() => [...new Set(all.map((r) => kategoriIzin(r.izin)))].sort(), [all]);
+  const kats = useMemo(() => [...new Set(all.map((r) => katIzin(r)))].sort(), [all]);
   const izins = useMemo(() => [...new Set(all.map((r) => r.izin).filter(Boolean))].sort((a, b) => izinShort(a).localeCompare(izinShort(b), "id")), [all]);
   const years = useMemo(() => [...new Set(all.map((r) => (isISO(r.tanggal) ? r.tanggal.slice(0, 4) : "")).filter(Boolean))].sort().reverse(), [all]);
 
   const rows = useMemo(() => {
     const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const out = all.filter((r) => {
-      if (f.kat !== "all" && kategoriIzin(r.izin) !== f.kat) return false;
+      if (f.kat !== "all" && katIzin(r) !== f.kat) return false;
       if (f.izin !== "all" && r.izin !== f.izin) return false;
       if (f.jenis !== "all" && r.jenis !== f.jenis) return false;
       if (f.status !== "all" && statusOf(r) !== f.status) return false;

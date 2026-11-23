@@ -21,6 +21,8 @@ const SicantikInput = lazy(() => import("./pages/sicantik/Input"));
 const SicantikImport = lazy(() => import("./pages/sicantik/Import"));
 const PelakuPage = lazy(() => import("./pages/Pelaku"));
 const PemohonPage = lazy(() => import("./pages/sicantik/Pemohon"));
+const KbliPage = lazy(() => import("./pages/master/Kbli"));
+const JenisIzinPage = lazy(() => import("./pages/master/JenisIzin"));
 
 
 function NotConfigured() {
@@ -64,12 +66,14 @@ function Gate() {
             <Route path="oss" element={<Dashboard />} />
             <Route path="oss/data" element={<DataArsip />} />
             <Route path="oss/pelaku" element={<PelakuPage />} />
+            <Route path="oss/kbli" element={<KbliPage />} />
             <Route path="oss/input" element={W(<InputData />)} />
             <Route path="oss/input/:id" element={W(<InputData />)} />
             <Route path="oss/import" element={W(<ImportExcel />)} />
             <Route path="sicantik" element={<SicantikDashboard />} />
             <Route path="sicantik/data" element={<SicantikData />} />
             <Route path="sicantik/pemohon" element={<PemohonPage />} />
+            <Route path="sicantik/jenis-izin" element={<JenisIzinPage />} />
             <Route path="sicantik/input" element={W(<SicantikInput />)} />
             <Route path="sicantik/input/:id" element={W(<SicantikInput />)} />
             <Route path="sicantik/import" element={W(<SicantikImport />)} />

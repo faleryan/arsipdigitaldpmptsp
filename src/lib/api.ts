@@ -2,6 +2,7 @@
 import { createClient, type Session } from "@supabase/supabase-js";
 import { PELAKU_KEYS, PROYEK_KEYS, pick, type Dokumen, type Pelaku, type Proyek } from "./columns";
 import { IZIN_KEYS, type Izin, type Pemohon } from "./sicantik";
+import type { JenisIzin, Kbli } from "./master";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -23,7 +24,7 @@ export function errMsg(e: unknown): string {
   const err = e as { message?: string; code?: string; status?: number } | null;
   const m = err?.message || String(e);
   if (err?.code === "23505") return "Data dengan kunci (Id Proyek / NIB / ID) tersebut sudah ada.";
-  if (err?.code === "23503") return "Data masih terhubung dengan data lain (mis. pelaku usaha masih punya proyek), atau data induknya belum ada.";
+  if (err?.code === "23503") return "Data masih terhubung dengan data lain (mis. pelaku usaha masih punya proyek, atau jenis izin masih dipakai permohonan), atau data induknya belum ada.";
   if (err?.code === "42501" || /row-level security|permission denied/i.test(m)) return "Anda tidak memiliki izin untuk tindakan ini. Hubungi admin.";
   if (/Invalid login credentials/i.test(m)) return "Email atau kata sandi salah.";
   if (/Email not confirmed/i.test(m)) return "Email belum dikonfirmasi. Hubungi admin.";
@@ -208,14 +209,82 @@ export async function deleteAllSicantik(rows: Izin[], pemohon: Pemohon[], onProg
   }
 }
 export async function importSicantik(
-  pemohon: Pemohon[], izin: Izin[], opts: { skipExisting: boolean; fileName: string },
+  pemohon: Pemohon[], izin: Izin[], opts: { skipExisting: boolean; fileName: string; jenisBaru?: JenisIzin[] },
   onProgress?: (done: number, total: number) => void,
 ) {
   const total = pemohon.length + izin.length;
   let done = 0;
   const step = (n: number) => { done += n; onProgress?.(done, total); };
+  // jenis izin yang belum ada di master ditambahkan otomatis (data permohonan merujuk ke master)
+  if (opts.jenisBaru?.length) await upsertChunks("master_jenis_izin", opts.jenisBaru.map((j) => pick(j, JENIS_KEYS)), "nama", true);
   await upsertChunks("sicantik_pemohon", pemohon.map((p) => pick(p, PEMOHON_KEYS)), "id_pemohon", opts.skipExisting, step);
   await upsertChunks("sicantik_izin", izin.map((r) => ({ ...pick(r, IZIN_KEYS), sumber: "import", file_import: opts.fileName })), "id_sicantik", opts.skipExisting, step);
+}
+
+/* ---------------- Master KBLI ---------------- */
+const KBLI_KEYS = ["versi", "kode", "tingkat", "judul", "uraian", "kategori", "aktif"];
+/** Daftar KBLI tanpa uraian (uraian diambil saat dibuka, agar ringan) */
+export async function fetchKbli(): Promise<Kbli[]> {
+  const out: Kbli[] = [];
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    const { data, error } = await sb().from("master_kbli").select("versi,kode,tingkat,judul,kategori,aktif,updated_at")
+      .order("versi").order("kode").range(from, from + size - 1);
+    if (error) throw error;
+    out.push(...((data || []) as Kbli[]));
+    if (!data || data.length < size) break;
+  }
+  return out;
+}
+export async function getKbliUraian(versi: string, kode: string): Promise<string> {
+  const { data, error } = await sb().from("master_kbli").select("uraian").eq("versi", versi).eq("kode", kode).maybeSingle();
+  if (error) throw error;
+  return (data?.uraian as string) || "";
+}
+/** Cari kata di uraian KBLI (di server), maks. 60 hasil */
+export async function searchKbliUraian(q: string): Promise<{ versi: string; kode: string }[]> {
+  const { data, error } = await sb().from("master_kbli").select("versi,kode").ilike("uraian", `%${q.replace(/[%_]/g, "")}%`).limit(60);
+  if (error) throw error;
+  return (data || []) as { versi: string; kode: string }[];
+}
+export async function importKbli(rows: Kbli[], onProgress?: (done: number, total: number) => void) {
+  let done = 0;
+  await upsertChunks("master_kbli", rows.map((r) => pick(r, KBLI_KEYS)), "versi,kode", false, (n) => { done += n; onProgress?.(done, rows.length); });
+}
+export async function saveKbli(r: Kbli, original?: { versi: string; kode: string }) {
+  if (original) {
+    const { error } = await sb().from("master_kbli").update(pick(r, KBLI_KEYS)).eq("versi", original.versi).eq("kode", original.kode);
+    if (error) throw error;
+  } else {
+    const { error } = await sb().from("master_kbli").insert(pick(r, KBLI_KEYS));
+    if (error) throw error;
+  }
+}
+export async function deleteKbli(versi: string, kode: string) {
+  const { error } = await sb().from("master_kbli").delete().eq("versi", versi).eq("kode", kode);
+  if (error) throw error;
+}
+export async function deleteKbliVersi(versi: string) {
+  const { error } = await sb().from("master_kbli").delete().eq("versi", versi);
+  if (error) throw error;
+}
+
+/* ---------------- Master Jenis Izin ---------------- */
+const JENIS_KEYS = ["nama", "singkatan", "kategori", "persyaratan", "lama_layanan", "masa_berlaku", "keterangan", "aktif"];
+export const fetchJenisIzin = () => fetchPaged<JenisIzin>("master_jenis_izin", "*", "nama");
+/** Simpan jenis izin. Mengganti nama otomatis ikut mengganti nama izin di semua permohonan. */
+export async function saveJenisIzin(j: JenisIzin, originalNama?: string) {
+  if (originalNama) {
+    const { error } = await sb().from("master_jenis_izin").update(pick(j, JENIS_KEYS)).eq("nama", originalNama);
+    if (error) throw error;
+  } else {
+    const { error } = await sb().from("master_jenis_izin").insert(pick(j, JENIS_KEYS));
+    if (error) throw error;
+  }
+}
+export async function deleteJenisIzin(nama: string) {
+  const { error } = await sb().from("master_jenis_izin").delete().eq("nama", nama);
+  if (error) throw error;
 }
 
 /* ---------------- Dokumen (OSS & SiCantik) ---------------- */

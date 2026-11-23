@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { FileText, Loader2, Pencil, Save, UserPlus, Users } from "lucide-react";
-import { usePemohon, useSicantik } from "../../context/DataContext";
+import { useJenisIzin, usePemohon, useSicantik } from "../../context/DataContext";
+import { persyaratanList, syaratTerpenuhi } from "../../lib/master";
+import { CheckCircle2, Circle } from "lucide-react";
 import { useUI } from "../../context/UIContext";
 import { pad2 } from "../../lib/format";
 import { IZIN_SECTIONS, PEMOHON_FIELDS, pemohonPickItem, toFormValues, validateIzin, validatePemohon } from "../../lib/forms";
@@ -33,6 +35,7 @@ export default function SicantikInput() {
 function Form({ editing, initialPemohon }: { editing?: Izin; initialPemohon: string | null }) {
   const { rows, byId, refresh } = useSicantik();
   const pem = usePemohon();
+  const jenis = useJenisIzin();
   const { toast } = useUI();
   const nav = useNavigate();
 
@@ -54,6 +57,17 @@ function Form({ editing, initialPemohon }: { editing?: Izin; initialPemohon: str
     const u = (k: keyof Izin) => [...new Set(rows.map((r) => String(r[k] || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "id"));
     return { izin: u("izin"), lokasi: u("lokasi") };
   }, [rows]);
+  const izinGroups = useMemo(() => {
+    const g: Record<string, string[]> = {};
+    for (const j of [...jenis.rows].sort((a, b) => a.nama.localeCompare(b.nama, "id"))) {
+      if (!j.aktif && j.nama !== v.izin) continue;
+      (g[j.kategori || "Lainnya"] ||= []).push(j.nama);
+    }
+    return g;
+  }, [jenis.rows, v.izin]);
+  const selJenis = jenis.byId.get(v.izin);
+  const syarat = persyaratanList(selJenis);
+  const docLabels = [...pending.map((p) => p.label), ...(editing?.sicantik_dokumen || []).map((d) => d.label || d.nama_file)];
   const sel = pid ? pem.byId.get(pid) : undefined;
   const others = pid ? rows.filter((r) => r.pemohon_id === pid && r.id_sicantik !== editing?.id_sicantik) : [];
   const lastLokasi = others.find((r) => r.lokasi)?.lokasi;
@@ -148,7 +162,11 @@ function Form({ editing, initialPemohon }: { editing?: Izin; initialPemohon: str
         {IZIN_SECTIONS.map((sec, i) => (
           <div className="card form-sec" key={sec.title}>
             <div className="card-h col"><h3><span className="step-no teal">{i + 2}</span>{sec.title}</h3><span>{sec.desc}</span></div>
-            <FieldGrid fields={sec.fields.map((f) => (f.k === "id_sicantik" && editing ? { ...f, readOnly: true } : f))} v={v} errs={errs} set={set} lists={lists} idPrefix="si_" />
+            <FieldGrid fields={sec.fields.map((f) => (f.k === "id_sicantik" && editing ? { ...f, readOnly: true } : f.k === "izin" && !jenis.rows.length ? { ...f, type: "list" as const, dyn: "izin", hint: "Master Jenis Izin masih kosong — ketik nama izin" } : f))}
+              v={v} errs={errs} set={set} lists={lists} idPrefix="si_" groups={jenis.rows.length ? { izin: izinGroups } : {}} />
+            {sec.title === "Data izin" && selJenis && (selJenis.lama_layanan != null || selJenis.masa_berlaku) && (
+              <div className="sec-switch"><span className="cell-sub">{selJenis.lama_layanan != null && <>Standar waktu layanan <b>{selJenis.lama_layanan} hari</b>. </>}{selJenis.masa_berlaku && <>Masa berlaku: {selJenis.masa_berlaku}.</>}</span></div>
+            )}
           </div>
         ))}
 
@@ -163,7 +181,13 @@ function Form({ editing, initialPemohon }: { editing?: Izin; initialPemohon: str
               {editing?.sicantik_dokumen?.length ? (
                 <div className="docs saved">{editing.sicantik_dokumen.map((d) => <div className="doc-item" key={d.id}><FileText size={16} className="doc-ico" /><span className="nm">{d.label && <span className="doc-tag">{d.label}</span>}{d.nama_file}</span><span className="cell-sub">tersimpan</span></div>)}</div>
               ) : null}
-              <DocUploader pending={pending} onChange={setPending} labels={LABELS_SICANTIK} onReject={(m) => toast(m, 6000)} />
+              <DocUploader pending={pending} onChange={setPending} labels={[...syarat, ...LABELS_SICANTIK.filter((l) => !syarat.includes(l))]} onReject={(m) => toast(m, 6000)} />
+              {syarat.length > 0 && (
+                <div className="syarat-box">
+                  <b>Persyaratan {selJenis?.singkatan || "izin ini"}</b> — {syarat.filter((x) => syaratTerpenuhi(x, docLabels)).length} dari {syarat.length} sudah ada
+                  <ul className="syarat">{syarat.map((x) => { const ok = syaratTerpenuhi(x, docLabels); return <li key={x} className={ok ? "ok" : "miss"}>{ok ? <CheckCircle2 size={15} /> : <Circle size={15} />}{x}</li>; })}</ul>
+                </div>
+              )}
             </div>
           </div>
         </div>
